@@ -14,10 +14,9 @@ API="https://api.github.com/repos/$REPO/releases"
 
 CHANNEL="${KORLANG_CHANNEL:-${1:-}}"
 if [ -z "$CHANNEL" ]; then
-  if [ -t 0 ]; then
-    echo "Select release channel:"
-    printf "1) stable\n2) alpha\n> "
-    read -r CHOICE < /dev/tty
+  if [ -r /dev/tty ]; then
+    printf "Select release channel:\n1) stable\n2) alpha\n> " > /dev/tty
+    read -r CHOICE < /dev/tty || CHOICE=""
     CHANNEL="stable"
     [ "$CHOICE" = "2" ] && CHANNEL="alpha"
   else
@@ -25,27 +24,32 @@ if [ -z "$CHANNEL" ]; then
   fi
 fi
 
-pick_latest() {
-  curl -fsSL "$API" | \
-    awk -v chan="$1" '
-      /"tag_name":/ {
-        tag=$0;
-        gsub(/.*"tag_name": "|".*/, "", tag);
-        if (chan=="alpha") { if (tag ~ /alpha/) { print tag; exit } }
-        else { if (tag !~ /alpha/) { print tag; exit } }
-      }
-    '
+fetch_tags() {
+  curl -fsSL -H "Accept: application/vnd.github+json" "$API?per_page=100" | \
+    sed -n 's/.*"tag_name": "\([^"]*\)".*/\1/p'
 }
 
-LATEST=$(pick_latest "$CHANNEL")
+pick_latest() {
+  if [ "$1" = "alpha" ]; then
+    fetch_tags | grep -i 'alpha' | head -n1
+  else
+    fetch_tags | grep -vi 'alpha' | head -n1
+  fi
+}
 
-if [ -z "$LATEST" ] && [ "$CHANNEL" = "stable" ]; then
-  CHANNEL="alpha"
+if [ -n "$KORLANG_VERSION" ]; then
+  LATEST="$KORLANG_VERSION"
+else
   LATEST=$(pick_latest "$CHANNEL")
+
+  if [ -z "$LATEST" ] && [ "$CHANNEL" = "stable" ]; then
+    CHANNEL="alpha"
+    LATEST=$(pick_latest "$CHANNEL")
+  fi
 fi
 
 if [ -z "$LATEST" ]; then
-  echo "Failed to detect latest release" >&2
+  echo "Failed to detect latest $CHANNEL version" >&2
   exit 1
 fi
 
@@ -61,11 +65,13 @@ PROFILE="$HOME/.bashrc"
 [ -n "$ZSH_VERSION" ] && PROFILE="$HOME/.zshrc"
 
 if ! grep -q 'korlang/bin' "$PROFILE" 2>/dev/null; then
-  echo '\nexport PATH="$HOME/.korlang/bin:$PATH"' >> "$PROFILE"
+  printf '\nexport PATH="$HOME/.korlang/bin:$PATH"' >> "$PROFILE"
+  printf '\n' >> "$PROFILE"
 fi
 
 if ! grep -q 'KORLANG_HOME' "$PROFILE" 2>/dev/null; then
-  echo '\nexport KORLANG_HOME="$HOME/.korlang"' >> "$PROFILE"
+  printf '\nexport KORLANG_HOME="$HOME/.korlang"' >> "$PROFILE"
+  printf '\n' >> "$PROFILE"
 fi
 
 echo "Korlang installed from $LATEST ($CHANNEL). Restart your shell."

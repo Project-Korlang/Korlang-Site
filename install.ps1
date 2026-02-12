@@ -3,22 +3,36 @@ $ErrorActionPreference = "Stop"
 $repo = "Project-Korlang/Korlang-Site"
 $api = "https://api.github.com/repos/$repo/releases"
 
-Write-Host "Select release channel:"
-Write-Host "1) stable"
-Write-Host "2) alpha"
-$choice = Read-Host ">"
+$channel = $env:KORLANG_CHANNEL
+if (-not $channel) {
+  Write-Host "Select release channel:"
+  Write-Host "1) stable"
+  Write-Host "2) alpha"
+  $choice = Read-Host ">"
+  $channel = "stable"
+  if ($choice -eq "2") { $channel = "alpha" }
+}
 
-$channel = "stable"
-if ($choice -eq "2") { $channel = "alpha" }
+if ($env:KORLANG_VERSION) {
+  $latest = $env:KORLANG_VERSION
+} else {
+  $releases = Invoke-RestMethod -Uri "$api?per_page=100"
+  $latest = $null
+  foreach ($r in $releases) {
+    $tag = $r.tag_name
+    if ($channel -eq "alpha") {
+      if ($tag -match "alpha") { $latest = $tag; break }
+    } else {
+      if ($tag -notmatch "alpha") { $latest = $tag; break }
+    }
+  }
 
-$releases = Invoke-RestMethod -Uri $api
-$latest = $null
-foreach ($r in $releases) {
-  $tag = $r.tag_name
-  if ($channel -eq "alpha") {
-    if ($tag -match "alpha") { $latest = $tag; break }
-  } else {
-    if ($tag -notmatch "alpha") { $latest = $tag; break }
+  if (-not $latest -and $channel -eq "stable") {
+    $channel = "alpha"
+    foreach ($r in $releases) {
+      $tag = $r.tag_name
+      if ($tag -match "alpha") { $latest = $tag; break }
+    }
   }
 }
 
