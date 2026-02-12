@@ -14,12 +14,43 @@
     <div class="cta">
       <code>curl -fsSL https://project-korlang.github.io/Korlang-Site/install.sh | sh</code>
     </div>
-    <p>Manual downloads:</p>
-    <ul>
-      <li>Linux: korlang-&lt;version&gt;-linux-x86_64.tar.gz</li>
-      <li>macOS: korlang-&lt;version&gt;-macos-x86_64.tar.gz</li>
-      <li>Windows: korlang-&lt;version&gt;-windows-x86_64.zip</li>
-    </ul>
+    <p>You can force a channel:</p>
+    <div class="cta">
+      <code>KORLANG_CHANNEL=alpha curl -fsSL https://project-korlang.github.io/Korlang-Site/install.sh | sh</code>
+    </div>
   </header>
+
+  <section class="grid">
+    <div class="card">
+      <h2>Quick Start</h2>
+      <pre><code>korlang new hello
+cd hello
+korlang run src/main.kor</code></pre>
+    </div>
+    <div class="card">
+      <h2>Example Program</h2>
+      <pre><code>fun main() -> Int {
+  let msg = "Hello, Korlang!"
+  msg
+}</code></pre>
+    </div>
+    <div class="card">
+      <h2>Supported Commands</h2>
+      <pre><code>korlang new &lt;name&gt; [--lib|--ui|--cloud]
+korlang build &lt;file&gt; [-o out]
+korlang run &lt;file&gt;
+korlang test
+korlang doc
+korlang --help</code></pre>
+    </div>
+    <div class="card">
+      <h2>Manual Downloads</h2>
+      <ul>
+        <li>Linux: korlang-&lt;version&gt;-linux-x86_64.tar.gz</li>
+        <li>macOS: korlang-&lt;version&gt;-macos-x86_64.tar.gz</li>
+        <li>Windows: korlang-&lt;version&gt;-windows-x86_64.zip</li>
+      </ul>
+    </div>
+  </section>
 </body>
 </html>

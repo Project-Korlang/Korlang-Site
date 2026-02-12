@@ -1,2 +1,30 @@
 #!/usr/bin/env sh
-echo "korlang v0.0.1-alpha"
+VERSION="v0.0.1-alpha"
+
+show_help() {
+  cat <<EOH
+korlang $VERSION
+
+Usage:
+  korlang new <name> [--lib|--ui|--cloud]
+  korlang build <file.kor> [-o out]
+  korlang run <file.kor>
+  korlang test
+  korlang doc
+
+Options:
+  -h, --help   Show this help
+EOH
+}
+
+case "$1" in
+  -h|--help|help)
+    show_help
+    ;;
+  "")
+    echo "korlang $VERSION"
+    ;;
+  *)
+    echo "korlang $VERSION"
+    ;;
+esac
