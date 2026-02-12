@@ -1,6 +1,6 @@
 $ErrorActionPreference = "Stop"
 
-$repo = "project-korlang/korlang"
+$repo = "Project-Korlang/Korlang-Site"
 $api = "https://api.github.com/repos/$repo/releases/latest"
 $release = Invoke-RestMethod -Uri $api
 $version = $release.tag_name

@@ -9,7 +9,7 @@ case "$ARCH" in
   arm64|aarch64) ARCH="aarch64";;
 esac
 
-REPO="project-korlang/korlang"
+REPO="Project-Korlang/Korlang-Site"
 API="https://api.github.com/repos/$REPO/releases/latest"
 
 VERSION=$(curl -fsSL "$API" | grep '"tag_name"' | sed -E 's/.*"(v[^"]+)".*/\1/')
