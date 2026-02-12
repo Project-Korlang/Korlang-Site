@@ -17,6 +17,19 @@ Options:
 EOH
 }
 
+exec_real() {
+  if command -v korlang-real >/dev/null 2>&1; then
+    exec korlang-real "$@"
+  fi
+  if [ -n "$KORLANG_REAL" ] && [ -x "$KORLANG_REAL" ]; then
+    exec "$KORLANG_REAL" "$@"
+  fi
+  if [ -x "$HOME/.korlang/bin/korlang-real" ]; then
+    exec "$HOME/.korlang/bin/korlang-real" "$@"
+  fi
+  return 1
+}
+
 cmd="$1"
 shift || true
 
@@ -24,47 +37,55 @@ case "$cmd" in
   -h|--help|help)
     show_help
     ;;
-  new)
-    name="$1"
-    [ -z "$name" ] && { echo "korlang new <name>"; exit 1; }
-    mkdir -p "$name/src"
-    cat > "$name/Korlang.config" <<CFG
+  new|build|run|test|doc)
+    if exec_real "$cmd" "$@"; then
+      exit 0
+    fi
+    # fallback stub behavior
+    case "$cmd" in
+      new)
+        name="$1"
+        [ -z "$name" ] && { echo "korlang new <name>"; exit 1; }
+        mkdir -p "$name/src"
+        cat > "$name/Korlang.config" <<CFG
 [package]
 name = "$name"
 version = "0.1.0"
 
 [dependencies]
 CFG
-    cat > "$name/src/main.kor" <<SRC
+        cat > "$name/src/main.kor" <<SRC
 fun main() -> Int {
   0
 }
 SRC
-    echo "Created $name"
-    ;;
-  build)
-    file="$1"
-    [ -z "$file" ] && { echo "korlang build <file.kor>"; exit 1; }
-    out="a.out"
-    shift
-    while [ $# -gt 0 ]; do
-      if [ "$1" = "-o" ] && [ -n "$2" ]; then
-        out="$2"; shift 2; continue
-      fi
-      shift
-    done
-    echo "(stub) Compiled $file -> $out"
-    ;;
-  run)
-    file="$1"
-    [ -z "$file" ] && { echo "korlang run <file.kor>"; exit 1; }
-    echo "(stub) Running $file"
-    ;;
-  test)
-    echo "(stub) Running tests"
-    ;;
-  doc)
-    echo "(stub) Generating docs"
+        echo "Created $name"
+        ;;
+      build)
+        file="$1"
+        [ -z "$file" ] && { echo "korlang build <file.kor>"; exit 1; }
+        out="a.out"
+        shift
+        while [ $# -gt 0 ]; do
+          if [ "$1" = "-o" ] && [ -n "$2" ]; then
+            out="$2"; shift 2; continue
+          fi
+          shift
+        done
+        echo "(stub) Compiled $file -> $out"
+        ;;
+      run)
+        file="$1"
+        [ -z "$file" ] && { echo "korlang run <file.kor>"; exit 1; }
+        echo "(stub) Running $file"
+        ;;
+      test)
+        echo "(stub) Running tests"
+        ;;
+      doc)
+        echo "(stub) Generating docs"
+        ;;
+    esac
     ;;
   "")
     echo "korlang $VERSION"
