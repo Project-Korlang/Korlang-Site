@@ -1,8 +1,2 @@
 korlang v0.0.1-alpha
-Usage:
-  korlang new <name> [--lib|--ui|--cloud]
-  korlang build <file.kor> [-o out]
-  korlang run <file.kor>
-  korlang test
-  korlang doc
-  korlang --help
+(Windows binary placeholder)
