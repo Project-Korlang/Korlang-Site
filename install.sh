@@ -12,12 +12,18 @@ esac
 REPO="Project-Korlang/Korlang-Site"
 API="https://api.github.com/repos/$REPO/releases"
 
-echo "Select release channel:"
-printf "1) stable\n2) alpha\n> "
-read -r CHOICE
-
-CHANNEL="stable"
-[ "$CHOICE" = "2" ] && CHANNEL="alpha"
+CHANNEL="${KORLANG_CHANNEL:-}"
+if [ -z "$CHANNEL" ]; then
+  if [ -t 0 ]; then
+    echo "Select release channel:"
+    printf "1) stable\n2) alpha\n> "
+    read -r CHOICE < /dev/tty
+    CHANNEL="stable"
+    [ "$CHOICE" = "2" ] && CHANNEL="alpha"
+  else
+    CHANNEL="stable"
+  fi
+fi
 
 LATEST=$(curl -fsSL "$API" | \
   awk -v chan="$CHANNEL" '

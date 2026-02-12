@@ -4,7 +4,12 @@ on:
   push:
     tags:
       - "v*"
-  workflow_dispatch: {}
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag to upload assets to (existing or new)"
+        required: true
+        default: "v0.0.1-alpha"
 
 permissions:
   contents: write
@@ -20,6 +25,7 @@ jobs:
       - name: Upload release assets
         uses: softprops/action-gh-release@v2
         with:
+          tag_name: ${{ github.event.inputs.tag || github.ref_name }}
           files: |
             dist/korlang-*-linux-x86_64.tar.gz
             dist/korlang-*-macos-x86_64.tar.gz
