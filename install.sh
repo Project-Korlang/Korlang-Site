@@ -10,17 +10,32 @@ case "$ARCH" in
 esac
 
 REPO="Project-Korlang/Korlang-Site"
-API="https://api.github.com/repos/$REPO/releases/latest"
+API="https://api.github.com/repos/$REPO/releases"
 
-VERSION=$(curl -fsSL "$API" | grep '"tag_name"' | sed -E 's/.*"(v[^"]+)".*/\1/')
+echo "Select release channel:"
+printf "1) stable\n2) alpha\n> "
+read -r CHOICE
 
-if [ -z "$VERSION" ]; then
-  echo "Failed to detect latest version" >&2
+CHANNEL="stable"
+[ "$CHOICE" = "2" ] && CHANNEL="alpha"
+
+LATEST=$(curl -fsSL "$API" | \
+  awk -v chan="$CHANNEL" '
+    /"tag_name":/ {
+      tag=$0;
+      gsub(/.*"tag_name": "|".*/, "", tag);
+      if (chan=="alpha") { if (tag ~ /alpha/) { print tag; exit } }
+      else { if (tag !~ /alpha/) { print tag; exit } }
+    }
+  ')
+
+if [ -z "$LATEST" ]; then
+  echo "Failed to detect latest $CHANNEL version" >&2
   exit 1
 fi
 
-TARBALL="korlang-${VERSION}-${OS}-${ARCH}.tar.gz"
-URL="https://github.com/$REPO/releases/download/$VERSION/$TARBALL"
+TARBALL="korlang-${LATEST}-${OS}-${ARCH}.tar.gz"
+URL="https://github.com/$REPO/releases/download/$LATEST/$TARBALL"
 
 DEST="$HOME/.korlang/bin"
 mkdir -p "$DEST"
@@ -34,4 +49,4 @@ if ! grep -q 'korlang/bin' "$PROFILE" 2>/dev/null; then
   echo '\nexport PATH="$HOME/.korlang/bin:$PATH"' >> "$PROFILE"
 fi
 
-echo "Korlang installed. Restart your shell."
+echo "Korlang installed from $LATEST ($CHANNEL). Restart your shell."

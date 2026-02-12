@@ -4,6 +4,7 @@ on:
   push:
     tags:
       - "v*"
+  workflow_dispatch: {}
 
 permissions:
   contents: write
@@ -13,6 +14,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Ensure dist exists
+        run: |
+          ls -la dist
       - name: Upload release assets
         uses: softprops/action-gh-release@v2
         with:

@@ -1,14 +1,35 @@
 $ErrorActionPreference = "Stop"
 
 $repo = "Project-Korlang/Korlang-Site"
-$api = "https://api.github.com/repos/$repo/releases/latest"
-$release = Invoke-RestMethod -Uri $api
-$version = $release.tag_name
+$api = "https://api.github.com/repos/$repo/releases"
+
+Write-Host "Select release channel:"
+Write-Host "1) stable"
+Write-Host "2) alpha"
+$choice = Read-Host ">"
+
+$channel = "stable"
+if ($choice -eq "2") { $channel = "alpha" }
+
+$releases = Invoke-RestMethod -Uri $api
+$latest = $null
+foreach ($r in $releases) {
+  $tag = $r.tag_name
+  if ($channel -eq "alpha") {
+    if ($tag -match "alpha") { $latest = $tag; break }
+  } else {
+    if ($tag -notmatch "alpha") { $latest = $tag; break }
+  }
+}
+
+if (-not $latest) {
+  Write-Error "Failed to detect latest $channel version"
+}
 
 $os = "windows"
 $arch = "x86_64"
-$zip = "korlang-$version-$os-$arch.zip"
-$url = "https://github.com/$repo/releases/download/$version/$zip"
+$zip = "korlang-$latest-$os-$arch.zip"
+$url = "https://github.com/$repo/releases/download/$latest/$zip"
 
 $dest = "$HOME\.korlang\bin"
 New-Item -ItemType Directory -Force -Path $dest | Out-Null
@@ -22,4 +43,4 @@ if ($path -notlike "*\.korlang\bin*") {
   [Environment]::SetEnvironmentVariable("Path", "$path;$dest", "User")
 }
 
-Write-Host "Korlang installed. Restart your shell."
+Write-Host "Korlang installed from $latest ($channel). Restart your shell."
