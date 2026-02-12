@@ -52,7 +52,7 @@ fi
 TARBALL="korlang-${LATEST}-${OS}-${ARCH}.tar.gz"
 URL="https://github.com/$REPO/releases/download/$LATEST/$TARBALL"
 
-DEST="$HOME/.korlang/bin"
+DEST="$HOME/.korlang"
 mkdir -p "$DEST"
 
 curl -fsSL "$URL" | tar -xz -C "$DEST"
@@ -62,6 +62,10 @@ PROFILE="$HOME/.bashrc"
 
 if ! grep -q 'korlang/bin' "$PROFILE" 2>/dev/null; then
   echo '\nexport PATH="$HOME/.korlang/bin:$PATH"' >> "$PROFILE"
+fi
+
+if ! grep -q 'KORLANG_HOME' "$PROFILE" 2>/dev/null; then
+  echo '\nexport KORLANG_HOME="$HOME/.korlang"' >> "$PROFILE"
 fi
 
 echo "Korlang installed from $LATEST ($CHANNEL). Restart your shell."
