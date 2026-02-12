@@ -37,7 +37,7 @@ jobs:
       - name: Install build deps
         run: |
           sudo apt-get update
-          sudo apt-get install -y llvm-16 llvm-16-dev clang lld zip
+          sudo apt-get install -y llvm-16 llvm-16-dev clang lld zip libpolly-16-dev
 
       - name: Build runtime
         run: |
@@ -47,6 +47,7 @@ jobs:
       - name: Build CLI
         env:
           LLVM_SYS_160_PREFIX: /usr/lib/llvm-16
+          LLVM_SYS_160_NO_Polly: 1
         run: |
           cd compiler/src/tools/cli
           cargo build --release
