@@ -12,7 +12,7 @@ esac
 REPO="Project-Korlang/Korlang-Site"
 API="https://api.github.com/repos/$REPO/releases"
 
-CHANNEL="${KORLANG_CHANNEL:-}"
+CHANNEL="${KORLANG_CHANNEL:-${1:-}}"
 if [ -z "$CHANNEL" ]; then
   if [ -t 0 ]; then
     echo "Select release channel:"
@@ -25,18 +25,27 @@ if [ -z "$CHANNEL" ]; then
   fi
 fi
 
-LATEST=$(curl -fsSL "$API" | \
-  awk -v chan="$CHANNEL" '
-    /"tag_name":/ {
-      tag=$0;
-      gsub(/.*"tag_name": "|".*/, "", tag);
-      if (chan=="alpha") { if (tag ~ /alpha/) { print tag; exit } }
-      else { if (tag !~ /alpha/) { print tag; exit } }
-    }
-  ')
+pick_latest() {
+  curl -fsSL "$API" | \
+    awk -v chan="$1" '
+      /"tag_name":/ {
+        tag=$0;
+        gsub(/.*"tag_name": "|".*/, "", tag);
+        if (chan=="alpha") { if (tag ~ /alpha/) { print tag; exit } }
+        else { if (tag !~ /alpha/) { print tag; exit } }
+      }
+    '
+}
+
+LATEST=$(pick_latest "$CHANNEL")
+
+if [ -z "$LATEST" ] && [ "$CHANNEL" = "stable" ]; then
+  CHANNEL="alpha"
+  LATEST=$(pick_latest "$CHANNEL")
+fi
 
 if [ -z "$LATEST" ]; then
-  echo "Failed to detect latest $CHANNEL version" >&2
+  echo "Failed to detect latest release" >&2
   exit 1
 fi
 
