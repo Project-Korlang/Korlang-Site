@@ -2,7 +2,7 @@ name: Alpha Sync From Compiler
 
 on:
   schedule:
-    - cron: "*/30 * * * *"
+    - cron: "*/5 * * * *"
   workflow_dispatch:
   repository_dispatch:
     types: [compiler-updated]
@@ -15,18 +15,20 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  sync-alpha:
+  # Check if we actually need to build anything
+  check-version:
     runs-on: ubuntu-latest
+    outputs:
+      changed: ${{ steps.check.outputs.changed }}
+      sha: ${{ steps.compiler.outputs.sha }}
+      short: ${{ steps.compiler.outputs.short }}
     steps:
-      - uses: actions/checkout@v4
-
       - name: Resolve latest compiler commit
         id: compiler
         run: |
           SHA=$(git ls-remote https://github.com/Project-Korlang/Korlang-Compiler.git refs/heads/main | awk '{print $1}')
-          SHORT=$(echo "$SHA" | cut -c1-12)
           echo "sha=$SHA" >> "$GITHUB_OUTPUT"
-          echo "short=$SHORT" >> "$GITHUB_OUTPUT"
+          echo "short=$(echo $SHA | cut -c1-12)" >> "$GITHUB_OUTPUT"
 
       - name: Check current alpha release marker
         id: check
@@ -41,65 +43,89 @@ jobs:
             echo "changed=true" >> "$GITHUB_OUTPUT"
           fi
 
+  # Build native binaries for each OS
+  build:
+    needs: check-version
+    if: needs.check-version.outputs.changed == 'true'
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-latest
+            platform: linux
+            extension: tar.gz
+          - os: macos-latest
+            platform: macos
+            extension: tar.gz
+          - os: windows-latest
+            platform: windows
+            extension: zip
+    runs-on: ${{ matrix.os }}
+    steps:
       - uses: actions/checkout@v4
-        if: steps.check.outputs.changed == 'true'
         with:
           repository: Project-Korlang/Korlang-Compiler
-          ref: ${{ steps.compiler.outputs.sha }}
-          path: compiler
+          ref: ${{ needs.check-version.outputs.sha }}
 
       - uses: dtolnay/rust-toolchain@stable
-        if: steps.check.outputs.changed == 'true'
 
-      - name: Install build deps
-        if: steps.check.outputs.changed == 'true'
+      - name: Install LLVM (Linux)
+        if: runner.os == 'Linux'
         run: |
           sudo apt-get update
-          sudo apt-get install -y llvm-16 llvm-16-dev clang lld zip libpolly-16-dev
+          sudo apt-get install -y llvm-16 llvm-16-dev clang lld libpolly-16-dev
+          echo "LLVM_SYS_160_PREFIX=/usr/lib/llvm-16" >> $GITHUB_ENV
 
-      - name: Build runtime
-        if: steps.check.outputs.changed == 'true'
-        run: |
-          cd compiler/src/runtime
-          cargo build --release
+      - name: Install LLVM (macOS)
+        if: runner.os == 'macOS'
+        run: brew install llvm@16
 
-      - name: Build CLI
-        if: steps.check.outputs.changed == 'true'
-        env:
-          LLVM_SYS_160_PREFIX: /usr/lib/llvm-16
-          LLVM_SYS_160_NO_Polly: 1
+      - name: Build (All Platforms)
+        shell: bash
         run: |
-          cd compiler/src/tools/cli
-          cargo build --release
+          cd src/runtime && cargo build --release
+          cd ../tools/cli && cargo build --release
 
-      - name: Package alpha assets
-        if: steps.check.outputs.changed == 'true'
+      - name: Package (Unix)
+        if: runner.os != 'Windows'
         run: |
-          TAG="alpha-latest"
-          rm -rf dist
           mkdir -p dist/korlang/bin dist/korlang/lib
-          cp compiler/src/tools/cli/target/release/korlang dist/korlang/bin/
-          cp compiler/src/runtime/target/release/libkorlang_rt.a dist/korlang/lib/
-          tar -czf "dist/korlang-${TAG}-linux-x86_64.tar.gz" -C dist korlang
-          cp "dist/korlang-${TAG}-linux-x86_64.tar.gz" "dist/korlang-${TAG}-macos-x86_64.tar.gz"
-          zip -j "dist/korlang-${TAG}-windows-x86_64.zip" dist/korlang/bin/korlang dist/korlang/lib/libkorlang_rt.a
+          cp src/tools/cli/target/release/korlang dist/korlang/bin/
+          cp src/runtime/target/release/libkorlang_rt.a dist/korlang/lib/
+          tar -czf "korlang-alpha-latest-${{ matrix.platform }}-x86_64.tar.gz" -C dist korlang
 
-      - name: Publish rolling alpha release
-        if: steps.check.outputs.changed == 'true'
+      - name: Package (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Path dist/korlang/bin, dist/korlang/lib
+          Copy-Item src/tools/cli/target/release/korlang.exe dist/korlang/bin/
+          Copy-Item src/runtime/target/release/korlang_rt.lib dist/korlang/lib/
+          Compress-Archive -Path dist/korlang/* -DestinationPath "korlang-alpha-latest-windows-x86_64.zip"
+
+      - name: Upload Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: korlang-${{ matrix.platform }}
+          path: korlang-alpha-latest-*
+
+  # Finalize the release by attaching all binaries
+  publish:
+    needs: [check-version, build]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: all-assets
+          merge-multiple: true
+
+      - name: Update Release
         env:
           GITHUB_TOKEN: ${{ github.token }}
         run: |
           TAG="alpha-latest"
-          TITLE="alpha-latest (${{ steps.compiler.outputs.short }})"
-          BODY=$'Rolling alpha from Korlang-Compiler main.\n\ncompiler_sha=${{ steps.compiler.outputs.sha }}\nsource_repo=Project-Korlang/Korlang-Compiler'
-          gh release view "$TAG" >/dev/null 2>&1 || gh release create "$TAG" --prerelease -t "$TITLE" -n "$BODY"
-          gh release edit "$TAG" --prerelease -t "$TITLE" -n "$BODY"
-          gh release upload "$TAG" \
-            dist/korlang-*-linux-x86_64.tar.gz \
-            dist/korlang-*-macos-x86_64.tar.gz \
-            dist/korlang-*-windows-x86_64.zip \
-            --clobber
-
-      - name: No-op when unchanged
-        if: steps.check.outputs.changed != 'true'
-        run: echo "No new compiler commit. Alpha release unchanged."
+          TITLE="alpha-latest (${{ needs.check-version.outputs.short }})"
+          BODY=$'Rolling alpha build.\n\ncompiler_sha=${{ needs.check-version.outputs.sha }}'
+          
+          gh release view "$TAG" || gh release create "$TAG" --prerelease -t "$TITLE" -n "$BODY"
+          gh release edit "$TAG" -t "$TITLE" -n "$BODY"
+          gh release upload "$TAG" all-assets/* --clobber
