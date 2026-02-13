@@ -79,7 +79,7 @@ jobs:
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
-          choco install llvm --version 16.0.0 --no-progress
+          choco install llvm --version 16.0.0 --no-progress --allow-downgrade --force --yes
           echo "LLVM_SYS_160_PREFIX=C:\\Program Files\\LLVM" >> $env:GITHUB_ENV
 
       - name: Install LLVM (macOS)
