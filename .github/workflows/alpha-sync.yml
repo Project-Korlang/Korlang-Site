@@ -75,6 +75,13 @@ jobs:
           sudo apt-get install -y llvm-16 llvm-16-dev clang lld libpolly-16-dev
           echo "LLVM_SYS_160_PREFIX=/usr/lib/llvm-16" >> $GITHUB_ENV
 
+      - name: Install LLVM (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          choco install llvm --version 16.0.0 --no-progress
+          echo "LLVM_SYS_160_PREFIX=C:\\Program Files\\LLVM" >> $env:GITHUB_ENV
+
       - name: Install LLVM (macOS)
         if: runner.os == 'macOS'
         run: brew install llvm@16
