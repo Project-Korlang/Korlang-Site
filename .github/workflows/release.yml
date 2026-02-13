@@ -55,6 +55,7 @@ jobs:
       - name: Package release assets
         run: |
           TAG="${{ steps.tag.outputs.tag }}"
+          VERSION="${TAG#v}"
           rm -rf dist
           mkdir -p dist/korlang/bin dist/korlang/lib
           cp compiler/src/tools/cli/target/release/korlang dist/korlang/bin/
@@ -62,6 +63,26 @@ jobs:
           tar -czf "dist/korlang-${TAG}-linux-x86_64.tar.gz" -C dist korlang
           cp "dist/korlang-${TAG}-linux-x86_64.tar.gz" "dist/korlang-${TAG}-macos-x86_64.tar.gz"
           zip -j "dist/korlang-${TAG}-windows-x86_64.zip" dist/korlang/bin/korlang dist/korlang/lib/libkorlang_rt.a
+          # New format assets (version without leading 'v')
+          cp "dist/korlang-${TAG}-linux-x86_64.tar.gz" "dist/korlang-${VERSION}-linux-x86_64.tar.gz"
+          cp "dist/korlang-${TAG}-macos-x86_64.tar.gz" "dist/korlang-${VERSION}-macos-x86_64.tar.gz"
+          cp "dist/korlang-${TAG}-windows-x86_64.zip" "dist/korlang-${VERSION}-windows-x86_64.zip"
+          sha256sum dist/korlang-* > dist/korlang-${TAG}-checksums.txt
+          cat > dist/korlang-${TAG}-manifest.json <<JSON
+          {
+            "tag": "${TAG}",
+            "version": "${VERSION}",
+            "assets": [
+              "korlang-${TAG}-linux-x86_64.tar.gz",
+              "korlang-${TAG}-macos-x86_64.tar.gz",
+              "korlang-${TAG}-windows-x86_64.zip",
+              "korlang-${VERSION}-linux-x86_64.tar.gz",
+              "korlang-${VERSION}-macos-x86_64.tar.gz",
+              "korlang-${VERSION}-windows-x86_64.zip",
+              "korlang-${TAG}-checksums.txt"
+            ]
+          }
+          JSON
 
       - name: Upload release assets
         env:
@@ -73,4 +94,6 @@ jobs:
             dist/korlang-*-linux-x86_64.tar.gz \
             dist/korlang-*-macos-x86_64.tar.gz \
             dist/korlang-*-windows-x86_64.zip \
+            dist/korlang-${TAG}-checksums.txt \
+            dist/korlang-${TAG}-manifest.json \
             --clobber
