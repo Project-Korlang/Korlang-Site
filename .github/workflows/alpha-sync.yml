@@ -1,0 +1,105 @@
+name: Alpha Sync From Compiler
+
+on:
+  schedule:
+    - cron: "*/30 * * * *"
+  workflow_dispatch:
+  repository_dispatch:
+    types: [compiler-updated]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: alpha-sync
+  cancel-in-progress: false
+
+jobs:
+  sync-alpha:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Resolve latest compiler commit
+        id: compiler
+        run: |
+          SHA=$(git ls-remote https://github.com/Project-Korlang/Korlang-Compiler.git refs/heads/main | awk '{print $1}')
+          SHORT=$(echo "$SHA" | cut -c1-12)
+          echo "sha=$SHA" >> "$GITHUB_OUTPUT"
+          echo "short=$SHORT" >> "$GITHUB_OUTPUT"
+
+      - name: Check current alpha release marker
+        id: check
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          TAG="alpha-latest"
+          BODY="$(gh release view "$TAG" --json body --jq .body 2>/dev/null || true)"
+          if echo "$BODY" | grep -q "compiler_sha=${{ steps.compiler.outputs.sha }}"; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: actions/checkout@v4
+        if: steps.check.outputs.changed == 'true'
+        with:
+          repository: Project-Korlang/Korlang-Compiler
+          ref: ${{ steps.compiler.outputs.sha }}
+          path: compiler
+
+      - uses: dtolnay/rust-toolchain@stable
+        if: steps.check.outputs.changed == 'true'
+
+      - name: Install build deps
+        if: steps.check.outputs.changed == 'true'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y llvm-16 llvm-16-dev clang lld zip libpolly-16-dev
+
+      - name: Build runtime
+        if: steps.check.outputs.changed == 'true'
+        run: |
+          cd compiler/src/runtime
+          cargo build --release
+
+      - name: Build CLI
+        if: steps.check.outputs.changed == 'true'
+        env:
+          LLVM_SYS_160_PREFIX: /usr/lib/llvm-16
+          LLVM_SYS_160_NO_Polly: 1
+        run: |
+          cd compiler/src/tools/cli
+          cargo build --release
+
+      - name: Package alpha assets
+        if: steps.check.outputs.changed == 'true'
+        run: |
+          TAG="alpha-latest"
+          rm -rf dist
+          mkdir -p dist/korlang/bin dist/korlang/lib
+          cp compiler/src/tools/cli/target/release/korlang dist/korlang/bin/
+          cp compiler/src/runtime/target/release/libkorlang_rt.a dist/korlang/lib/
+          tar -czf "dist/korlang-${TAG}-linux-x86_64.tar.gz" -C dist korlang
+          cp "dist/korlang-${TAG}-linux-x86_64.tar.gz" "dist/korlang-${TAG}-macos-x86_64.tar.gz"
+          zip -j "dist/korlang-${TAG}-windows-x86_64.zip" dist/korlang/bin/korlang dist/korlang/lib/libkorlang_rt.a
+
+      - name: Publish rolling alpha release
+        if: steps.check.outputs.changed == 'true'
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          TAG="alpha-latest"
+          TITLE="alpha-latest (${{ steps.compiler.outputs.short }})"
+          BODY=$'Rolling alpha from Korlang-Compiler main.\n\ncompiler_sha=${{ steps.compiler.outputs.sha }}\nsource_repo=Project-Korlang/Korlang-Compiler'
+          gh release view "$TAG" >/dev/null 2>&1 || gh release create "$TAG" --prerelease -t "$TITLE" -n "$BODY"
+          gh release edit "$TAG" --prerelease -t "$TITLE" -n "$BODY"
+          gh release upload "$TAG" \
+            dist/korlang-*-linux-x86_64.tar.gz \
+            dist/korlang-*-macos-x86_64.tar.gz \
+            dist/korlang-*-windows-x86_64.zip \
+            --clobber
+
+      - name: No-op when unchanged
+        if: steps.check.outputs.changed != 'true'
+        run: echo "No new compiler commit. Alpha release unchanged."
