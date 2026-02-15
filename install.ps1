@@ -1,7 +1,6 @@
 $ErrorActionPreference = "Stop"
 
 $repo = "Project-Korlang/Korlang-Compiler"
-# Use explicit string joining to avoid any potential interpolation issues in different PS versions
 $apiUrl = "https://api.github.com/repos/" + $repo + "/releases"
 
 # Add TLS/SSL support and user agent
@@ -21,6 +20,7 @@ if (-not $channel) {
   if ($choice -eq "2") { $channel = "alpha" }
 }
 
+$latest = $null
 if ($env:KORLANG_VERSION) {
   $latest = $env:KORLANG_VERSION
   Write-Host "Using specified version: $latest"
@@ -31,37 +31,28 @@ if ($env:KORLANG_VERSION) {
       "User-Agent" = "Korlang-Installer/1.1"
       "Accept" = "application/vnd.github.v3+json"
     }
-    # Use $apiUrl here
     $releases = Invoke-RestMethod -Uri ($apiUrl + "?per_page=100") -Headers $headers -TimeoutSec 30
-    $latest = $null
-    foreach ($r in $releases) {
-      $tag = $r.tag_name
-      if ($channel -eq "alpha") {
-        if ($tag -match "alpha") { $latest = $tag; break }
-      } else {
-        if ($tag -notmatch "alpha") { $latest = $tag; break }
-      }
-    }
-
-    if (-not $latest -and $channel -eq "stable") {
-      Write-Host "No stable release found, falling back to alpha..."
-      $channel = "alpha"
-      foreach ($r in $releases) {
-        $tag = $r.tag_name
-        if ($tag -match "alpha") { $latest = $tag; break }
-      }
+    
+    if ($releases -and $releases.Count -gt 0) {
+        foreach ($r in $releases) {
+          $tag = $r.tag_name
+          if ($channel -eq "alpha") {
+            if ($tag -match "alpha") { $latest = $tag; break }
+          } else {
+            if ($tag -notmatch "alpha") { $latest = $tag; break }
+          }
+        }
     }
   } catch {
-    Write-Host "Error fetching releases: $($_.Exception.Message)"
-    Write-Host "Manual selection failed, falling back to v0.1.0-alpha"
-    $latest = "v0.1.0-alpha"
-    $channel = "alpha"
+    Write-Host "Note: Could not reach GitHub API ($($_.Exception.Message))"
   }
 }
 
+# Fallback if no releases found or API failed
 if (-not $latest) {
-  Write-Error "Failed to detect latest $channel version"
-  exit 1
+  $latest = "v0.1.0-alpha"
+  Write-Host "No releases found on GitHub yet. Falling back to default: $latest"
+  $channel = "alpha"
 }
 
 Write-Host "Selected version: $latest ($channel)"
@@ -74,7 +65,7 @@ $url = "https://github.com/" + $repo + "/releases/download/" + $latest + "/" + $
 Write-Host "Downloading: $zip"
 Write-Host "From: $url"
 
-$dest = Join-Path $HOME ".korlangin"
+$dest = Join-Path $HOME ".korlang\bin"
 if (-not (Test-Path $dest)) {
     New-Item -ItemType Directory -Force -Path $dest | Out-Null
 }
@@ -82,7 +73,9 @@ if (-not (Test-Path $dest)) {
 try {
   $temp = [System.IO.Path]::GetTempFileName()
   Write-Host "Downloading to temporary file..."
-  Invoke-WebRequest -Uri $url -OutFile $temp -Headers $headers -TimeoutSec 60
+  # We still use $headers here, but note they might be empty if we skipped the try block
+  $dlHeaders = @{ "User-Agent" = "Korlang-Installer/1.1" }
+  Invoke-WebRequest -Uri $url -OutFile $temp -Headers $dlHeaders -TimeoutSec 60
   
   Write-Host "Extracting to $dest"
   $extractTemp = Join-Path $dest "extract_temp"
