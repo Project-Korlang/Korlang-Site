@@ -26,7 +26,7 @@ jobs:
           if [ -z "$TAG" ]; then TAG="v0.0.1-alpha"; fi
           if [[ "${{ github.ref }}" == refs/tags/* ]]; then TAG="${{ github.ref_name }}"; fi
           echo "tag=$TAG" >> $GITHUB_OUTPUT
-          gh release view "$TAG" >/dev/null 2>&1 || gh release create "$TAG" -t "$TAG" -n "Auto release"
+          gh release view "$TAG" --repo ${{ github.repository }} >/dev/null 2>&1 || gh release create "$TAG" -t "$TAG" -n "Auto release" --repo ${{ github.repository }}
         env:
           GITHUB_TOKEN: ${{ github.token }}
 
@@ -120,5 +120,5 @@ jobs:
         run: |
           TAG="${{ needs.create-release.outputs.tag }}"
           VERSION="${TAG#v}"
-          gh release upload "$TAG" korlang-${TAG}-${{ matrix.platform }}-x86_64.${{ matrix.asset_ext }} --clobber
-          gh release upload "$TAG" korlang-${VERSION}-${{ matrix.platform }}-x86_64.${{ matrix.asset_ext }} --clobber
+          gh release upload "$TAG" korlang-${TAG}-${{ matrix.platform }}-x86_64.${{ matrix.asset_ext }} --clobber --repo ${{ github.repository }}
+          gh release upload "$TAG" korlang-${VERSION}-${{ matrix.platform }}-x86_64.${{ matrix.asset_ext }} --clobber --repo ${{ github.repository }}
