@@ -97,17 +97,31 @@ jobs:
           "RUSTFLAGS=-C linker=lld-link" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
           "CARGO_TARGET_X86_64_PC_WINDOWS_MSVC_LINKER=lld-link" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
 
-      - name: Build Runtime
-        shell: bash
+      - name: Build Runtime (Windows)
+        if: matrix.os == 'windows-latest'
+        shell: pwsh
         run: |
+          $env:LLVM_SYS_160_PREFIX = "C:/LLVM"
+          $env:LLVM_CONFIG = "C:/LLVM/bin/llvm-config.exe"
           cd compiler/src/runtime
           cargo build --release
 
-      - name: Build CLI
-        shell: bash
+      - name: Build CLI (Windows)
+        if: matrix.os == 'windows-latest'
+        shell: pwsh
         run: |
+          $env:LLVM_SYS_160_PREFIX = "C:/LLVM"
+          $env:LLVM_CONFIG = "C:/LLVM/bin/llvm-config.exe"
           cd compiler/src/tools/cli
           cargo build --release
+
+      - name: Build (Unix)
+        if: matrix.os != 'windows-latest'
+        shell: bash
+        run: |
+          cd compiler/src/runtime && cargo build --release
+          cd ../../../
+          cd compiler/src/tools/cli && cargo build --release
 
       - name: Package (Unix)
         if: matrix.os != 'windows-latest'

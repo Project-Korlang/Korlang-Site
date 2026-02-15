@@ -107,11 +107,25 @@ jobs:
         if: runner.os == 'macOS'
         run: brew install llvm@16
 
-      - name: Build (All Platforms)
+      - name: Build (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $env:LLVM_SYS_160_PREFIX = "C:/LLVM"
+          $env:LLVM_CONFIG = "C:/LLVM/bin/llvm-config.exe"
+          cd src/runtime
+          cargo build --release
+          cd ../..
+          cd src/tools/cli
+          cargo build --release
+
+      - name: Build (Unix)
+        if: runner.os != 'Windows'
         shell: bash
         run: |
           cd src/runtime && cargo build --release
-          cd ../tools/cli && cargo build --release
+          cd ../../
+          cd src/tools/cli && cargo build --release
 
       - name: Package (Unix)
         if: runner.os != 'Windows'
