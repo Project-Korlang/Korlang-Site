@@ -1,7 +1,8 @@
 $ErrorActionPreference = "Stop"
 
 $repo = "Project-Korlang/Korlang-Compiler"
-$api = "https://api.github.com/repos/$repo/releases"
+# Use explicit string joining to avoid any potential interpolation issues in different PS versions
+$apiUrl = "https://api.github.com/repos/" + $repo + "/releases"
 
 # Add TLS/SSL support and user agent
 $ProgressPreference = "SilentlyContinue"
@@ -30,7 +31,8 @@ if ($env:KORLANG_VERSION) {
       "User-Agent" = "Korlang-Installer/1.1"
       "Accept" = "application/vnd.github.v3+json"
     }
-    $releases = Invoke-RestMethod -Uri "$api?per_page=100" -Headers $headers -TimeoutSec 30
+    # Use $apiUrl here
+    $releases = Invoke-RestMethod -Uri ($apiUrl + "?per_page=100") -Headers $headers -TimeoutSec 30
     $latest = $null
     foreach ($r in $releases) {
       $tag = $r.tag_name
@@ -51,8 +53,8 @@ if ($env:KORLANG_VERSION) {
     }
   } catch {
     Write-Host "Error fetching releases: $($_.Exception.Message)"
-    Write-Host "Falling back to manual installation..."
-    $latest = "v0.1.0-alpha"  # Fallback version
+    Write-Host "Manual selection failed, falling back to v0.1.0-alpha"
+    $latest = "v0.1.0-alpha"
     $channel = "alpha"
   }
 }
@@ -66,17 +68,19 @@ Write-Host "Selected version: $latest ($channel)"
 
 $os = "windows"
 $arch = "x86_64"
-$zip = "korlang-$latest-$os-$arch.zip"
-$url = "https://github.com/$repo/releases/download/$latest/$zip"
+$zip = "korlang-" + $latest + "-" + $os + "-" + $arch + ".zip"
+$url = "https://github.com/" + $repo + "/releases/download/" + $latest + "/" + $zip
 
 Write-Host "Downloading: $zip"
 Write-Host "From: $url"
 
-$dest = "$HOME\.korlang\bin"
-New-Item -ItemType Directory -Force -Path $dest | Out-Null
+$dest = Join-Path $HOME ".korlangin"
+if (-not (Test-Path $dest)) {
+    New-Item -ItemType Directory -Force -Path $dest | Out-Null
+}
 
 try {
-  $temp = New-TemporaryFile
+  $temp = [System.IO.Path]::GetTempFileName()
   Write-Host "Downloading to temporary file..."
   Invoke-WebRequest -Uri $url -OutFile $temp -Headers $headers -TimeoutSec 60
   
@@ -96,12 +100,12 @@ try {
   }
   
   Remove-Item $extractTemp -Recurse -Force
-  Remove-Item $temp
+  if (Test-Path $temp) { Remove-Item $temp }
 } catch {
   Write-Host "Download failed: $($_.Exception.Message)"
   Write-Host ""
   Write-Host "Manual Installation Instructions:"
-  Write-Host "1. Visit: https://github.com/Project-Korlang/Korlang-Compiler/releases"
+  Write-Host ("1. Visit: https://github.com/" + $repo + "/releases")
   Write-Host "2. Download: $zip"
   Write-Host "3. Extract to: $dest"
   Write-Host "4. Add to PATH: $dest"
