@@ -88,6 +88,8 @@ jobs:
           echo "LLVM_SYS_160_PREFIX=$llvmPath" >> $env:GITHUB_ENV
           echo "$llvmPath\bin" >> $env:GITHUB_PATH
           echo "LIB=$llvmPath\lib;$env:LIB" >> $env:GITHUB_ENV
+          # Use LLVM's lld-link to avoid conflicts with Git's link.exe
+          echo "RUSTFLAGS=-C linker=lld-link" >> $env:GITHUB_ENV
 
       - name: Install LLVM (macOS)
         if: runner.os == 'macOS'
