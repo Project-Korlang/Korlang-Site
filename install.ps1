@@ -7,7 +7,7 @@ $apiUrl = "https://api.github.com/repos/" + $repo + "/releases"
 $ProgressPreference = "SilentlyContinue"
 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
 
-Write-Host "Korlang Installer v1.1"
+Write-Host "Korlang Installer v1.2"
 Write-Host "========================"
 
 $channel = $env:KORLANG_CHANNEL
@@ -21,14 +21,18 @@ if (-not $channel) {
 }
 
 $latest = $null
+$zip = $null
+$url = $null
+
 if ($env:KORLANG_VERSION) {
   $latest = $env:KORLANG_VERSION
   Write-Host "Using specified version: $latest"
+  # Note: if version is specified, we still need to find the asset URL or construct it
 } else {
   Write-Host "Fetching latest $channel release from GitHub..."
   try {
     $headers = @{
-      "User-Agent" = "Korlang-Installer/1.1"
+      "User-Agent" = "Korlang-Installer/1.2"
       "Accept" = "application/vnd.github.v3+json"
     }
     $releases = Invoke-RestMethod -Uri ($apiUrl + "?per_page=100") -Headers $headers -TimeoutSec 30
@@ -36,10 +40,27 @@ if ($env:KORLANG_VERSION) {
     if ($releases -and $releases.Count -gt 0) {
         foreach ($r in $releases) {
           $tag = $r.tag_name
+          
+          # 1. Filter by channel (stable vs alpha)
           if ($channel -eq "alpha") {
-            if ($tag -match "alpha") { $latest = $tag; break }
+            if ($tag -notmatch "alpha") { continue }
           } else {
-            if ($tag -notmatch "alpha") { $latest = $tag; break }
+            if ($tag -match "alpha") { continue }
+          }
+
+          # 2. Look for an asset with "windows" in the name
+          $winAssets = $r.assets | Where-Object { $_.name -like "*windows*" }
+          if ($winAssets) {
+              # Prefer x86_64 if available
+              $targetAsset = $winAssets | Where-Object { $_.name -like "*x86_64*" } | Select-Object -First 1
+              if (-not $targetAsset) { $targetAsset = $winAssets | Select-Object -First 1 }
+              
+              if ($targetAsset) {
+                  $latest = $tag
+                  $zip = $targetAsset.name
+                  $url = $targetAsset.browser_download_url
+                  break
+              }
           }
         }
     }
@@ -48,22 +69,17 @@ if ($env:KORLANG_VERSION) {
   }
 }
 
-# Fallback if no releases found or API failed
-if (-not $latest) {
-  $latest = "v0.1.0-alpha"
-  Write-Host "No releases found on GitHub yet. Falling back to default: $latest"
+# Fallback mechanism if detection failed (e.g. repo empty or offline)
+if (-not $url) {
+  if (-not $latest) { $latest = "v0.1.0-alpha" }
   $channel = "alpha"
+  $zip = "korlang-" + $latest + "-windows-x86_64.zip"
+  $url = "https://github.com/" + $repo + "/releases/download/" + $latest + "/" + $zip
+  Write-Host "Auto-detection found no matching assets. Using default: $latest"
 }
 
-Write-Host "Selected version: $latest ($channel)"
-
-$os = "windows"
-$arch = "x86_64"
-$zip = "korlang-" + $latest + "-" + $os + "-" + $arch + ".zip"
-$url = "https://github.com/" + $repo + "/releases/download/" + $latest + "/" + $zip
-
-Write-Host "Downloading: $zip"
-Write-Host "From: $url"
+Write-Host "Selected: $latest ($channel)"
+Write-Host "Asset: $zip"
 
 $dest = Join-Path $HOME ".korlang\bin"
 if (-not (Test-Path $dest)) {
@@ -72,9 +88,8 @@ if (-not (Test-Path $dest)) {
 
 try {
   $temp = [System.IO.Path]::GetTempFileName()
-  Write-Host "Downloading to temporary file..."
-  # We still use $headers here, but note they might be empty if we skipped the try block
-  $dlHeaders = @{ "User-Agent" = "Korlang-Installer/1.1" }
+  Write-Host "Downloading..."
+  $dlHeaders = @{ "User-Agent" = "Korlang-Installer/1.2" }
   Invoke-WebRequest -Uri $url -OutFile $temp -Headers $dlHeaders -TimeoutSec 60
   
   Write-Host "Extracting to $dest"
@@ -86,7 +101,7 @@ try {
   
   $extracted = Get-ChildItem -Path $extractTemp
   if ($extracted.Count -eq 1 -and $extracted[0].PSIsContainer) {
-      Write-Host "Detected top-level directory in zip, stripping..."
+      Write-Host "Stripping top-level directory..."
       Get-ChildItem -Path $extracted[0].FullName | Move-Item -Destination $dest -Force
   } else {
       $extracted | Move-Item -Destination $dest -Force
@@ -97,11 +112,10 @@ try {
 } catch {
   Write-Host "Download failed: $($_.Exception.Message)"
   Write-Host ""
-  Write-Host "Manual Installation Instructions:"
+  Write-Host "Manual Installation:"
   Write-Host ("1. Visit: https://github.com/" + $repo + "/releases")
   Write-Host "2. Download: $zip"
   Write-Host "3. Extract to: $dest"
-  Write-Host "4. Add to PATH: $dest"
   exit 1
 }
 
@@ -109,22 +123,16 @@ try {
 $korlangExe = Join-Path $dest "korlang.exe"
 if (Test-Path $korlangExe) {
   Write-Host "✓ Korlang installed successfully!"
-  Write-Host "Location: $korlangExe"
   
-  # Add to PATH if not already present
   $path = [Environment]::GetEnvironmentVariable("Path", "User")
   if ($path -notlike "*\.korlang\bin*") {
     Write-Host "Adding to PATH..."
     [Environment]::SetEnvironmentVariable("Path", "$path;$dest", "User")
     Write-Host "✓ Added to user PATH. Restart your shell to use."
-  } else {
-    Write-Host "✓ Already in PATH."
   }
   
-  Write-Host ""
-  Write-Host "Installation complete! Restart your shell and run:"
-  Write-Host "korlang --version"
+  Write-Host "Run: korlang --version"
 } else {
-  Write-Error "Installation verification failed. korlang.exe not found."
+  Write-Error "Verification failed. korlang.exe not found."
   exit 1
 }
