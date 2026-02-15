@@ -129,6 +129,4 @@ jobs:
           GITHUB_TOKEN: ${{ github.token }}
         run: |
           TAG="${{ needs.create-release.outputs.tag }}"
-          VERSION="${TAG#v}"
           gh release upload "$TAG" korlang-${TAG}-${{ matrix.platform }}-x86_64.${{ matrix.asset_ext }} --clobber --repo ${{ github.repository }}
-          gh release upload "$TAG" korlang-${VERSION}-${{ matrix.platform }}-x86_64.${{ matrix.asset_ext }} --clobber --repo ${{ github.repository }}
