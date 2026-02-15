@@ -75,12 +75,19 @@ jobs:
           sudo apt-get install -y llvm-16 llvm-16-dev clang lld libpolly-16-dev
           echo "LLVM_SYS_160_PREFIX=/usr/lib/llvm-16" >> $GITHUB_ENV
 
+      - name: Setup MSVC (Windows)
+        if: runner.os == 'Windows'
+        uses: ilammy/msvc-dev-cmd@v1
+
       - name: Install LLVM (Windows)
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
-          choco install llvm --version 16.0.0 --no-progress --allow-downgrade --force --yes
-          echo "LLVM_SYS_160_PREFIX=C:\\Program Files\\LLVM" >> $env:GITHUB_ENV
+          choco install llvm --version=16.0.6 --no-progress --allow-downgrade --force --yes
+          $llvmPath = "C:\Program Files\LLVM"
+          echo "LLVM_SYS_160_PREFIX=$llvmPath" >> $env:GITHUB_ENV
+          echo "$llvmPath\bin" >> $env:GITHUB_PATH
+          echo "LIB=$llvmPath\lib;$env:LIB" >> $env:GITHUB_ENV
 
       - name: Install LLVM (macOS)
         if: runner.os == 'macOS'
@@ -95,18 +102,24 @@ jobs:
       - name: Package (Unix)
         if: runner.os != 'Windows'
         run: |
-          mkdir -p dist/korlang/bin dist/korlang/lib
+          mkdir -p dist/korlang/bin dist/korlang/lib dist/korlang/stdlib
           cp src/tools/cli/target/release/korlang dist/korlang/bin/
           cp src/runtime/target/release/libkorlang_rt.a dist/korlang/lib/
+          cp -r src/stdlib/* dist/korlang/stdlib/
           tar -czf "korlang-alpha-latest-${{ matrix.platform }}-x86_64.tar.gz" -C dist korlang
 
       - name: Package (Windows)
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
-          New-Item -ItemType Directory -Path dist/korlang/bin, dist/korlang/lib
+          New-Item -ItemType Directory -Path dist/korlang/bin, dist/korlang/lib, dist/korlang/stdlib -Force
           Copy-Item src/tools/cli/target/release/korlang.exe dist/korlang/bin/
-          Copy-Item src/runtime/target/release/korlang_rt.lib dist/korlang/lib/
+          Copy-Item -Path src/stdlib/* -Destination dist/korlang/stdlib/ -Recurse -Force
+          if (Test-Path "src/runtime/target/release/korlang_rt.lib") {
+            Copy-Item "src/runtime/target/release/korlang_rt.lib" dist/korlang/lib/
+          } else {
+            Copy-Item "src/runtime/target/release/libkorlang_rt.a" dist/korlang/lib/korlang_rt.lib
+          }
           Compress-Archive -Path dist/korlang/* -DestinationPath "korlang-alpha-latest-windows-x86_64.zip"
 
       - name: Upload Artifacts
