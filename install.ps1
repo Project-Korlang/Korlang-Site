@@ -7,7 +7,7 @@ $apiUrl = "https://api.github.com/repos/" + $repo + "/releases"
 $ProgressPreference = "SilentlyContinue"
 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
 
-Write-Host "Korlang Installer v1.4"
+Write-Host "Korlang Installer v1.5"
 Write-Host "========================"
 
 $channel = $env:KORLANG_CHANNEL
@@ -31,13 +31,15 @@ if ($env:KORLANG_VERSION) {
   Write-Host "Fetching latest $channel release from GitHub..."
   try {
     $headers = @{
-      "User-Agent" = "Korlang-Installer/1.4"
+      "User-Agent" = "Korlang-Installer/1.5"
       "Accept" = "application/vnd.github.v3+json"
     }
     $releases = Invoke-RestMethod -Uri ($apiUrl + "?per_page=100") -Headers $headers -TimeoutSec 30
     
     if ($releases -and $releases.Count -gt 0) {
-        foreach ($r in $releases) {
+        # Sort releases to prefer v* tags over rolling tags if possible
+        $sortedReleases = $releases | Sort-Object { $_.created_at } -Descending
+        foreach ($r in $sortedReleases) {
           $tag = $r.tag_name
           
           if ($channel -eq "alpha") {
@@ -46,7 +48,7 @@ if ($env:KORLANG_VERSION) {
             if ($tag -match "alpha") { continue }
           }
 
-          $winAssets = $r.assets | Where-Object { $_.name -like "*windows*" }
+          $winAssets = $r.assets | Where-Object { $_.name -like "*windows*" -and $_.name -like "*.zip" }
           if ($winAssets) {
               $targetAsset = $winAssets | Where-Object { $_.name -like "*x86_64*" } | Select-Object -First 1
               if (-not $targetAsset) { $targetAsset = $winAssets | Select-Object -First 1 }
@@ -81,35 +83,39 @@ if (-not (Test-Path $dest)) {
     New-Item -ItemType Directory -Force -Path $dest | Out-Null
 }
 
+$temp = $null
 try {
-  # FIX: Expand-Archive requires the file to have a .zip extension
   $tempDir = [System.IO.Path]::GetTempPath()
   $temp = Join-Path $tempDir ([Guid]::NewGuid().ToString() + ".zip")
   
   Write-Host "Downloading..."
-  $dlHeaders = @{ "User-Agent" = "Korlang-Installer/1.4" }
+  $dlHeaders = @{ "User-Agent" = "Korlang-Installer/1.5" }
   Invoke-WebRequest -Uri $url -OutFile $temp -Headers $dlHeaders -TimeoutSec 60
   
-  Write-Host "Extracting to $dest"
+  Write-Host "Extracting..."
   $extractTemp = Join-Path $dest "extract_temp"
   if (Test-Path $extractTemp) { Remove-Item $extractTemp -Recurse -Force }
   New-Item -ItemType Directory -Force -Path $extractTemp | Out-Null
   
   Expand-Archive -Path $temp -DestinationPath $extractTemp -Force
   
-  $extracted = Get-ChildItem -Path $extractTemp
-  if ($extracted.Count -eq 1 -and $extracted[0].PSIsContainer) {
-      Write-Host "Stripping top-level directory..."
-      Get-ChildItem -Path $extracted[0].FullName | Move-Item -Destination $dest -Force
+  # Robust Installation: Find korlang.exe wherever it is in the zip
+  $exeFile = Get-ChildItem -Path $extractTemp -Recurse -Filter "korlang.exe" | Select-Object -First 1
+  
+  if ($exeFile) {
+      $srcDir = $exeFile.Directory.FullName
+      Write-Host "Detected structure: korlang.exe found in $($exeFile.Directory.Name). Moving files..."
+      Get-ChildItem -Path $srcDir | Move-Item -Destination $dest -Force
   } else {
-      $extracted | Move-Item -Destination $dest -Force
+      Write-Host "Warning: korlang.exe not found in archive. Moving all files flat..."
+      Get-ChildItem -Path $extractTemp -Recurse | Where-Object { -not $_.PSIsContainer } | Move-Item -Destination $dest -Force
   }
   
-  Remove-Item $extractTemp -Recurse -Force
+  if (Test-Path $extractTemp) { Remove-Item $extractTemp -Recurse -Force }
   if (Test-Path $temp) { Remove-Item $temp }
 } catch {
-  Write-Host "Download failed: $($_.Exception.Message)"
-  if (Test-Path $temp) { Remove-Item $temp }
+  Write-Host "Error: $($_.Exception.Message)"
+  if ($temp -and (Test-Path $temp)) { Remove-Item $temp }
   Write-Host ""
   Write-Host "Manual Installation:"
   Write-Host ("1. Visit: https://github.com/" + $repo + "/releases")
@@ -131,6 +137,10 @@ if (Test-Path $korlangExe) {
   
   Write-Host "Run: korlang --version"
 } else {
-  Write-Error "Verification failed. korlang.exe not found."
+  Write-Host "----------------------------------------"
+  Write-Host "ERROR: Verification failed. korlang.exe not found at $dest"
+  Write-Host "Contents of $dest :"
+  Get-ChildItem -Path $dest | Select-Object Name
+  Write-Host "----------------------------------------"
   exit 1
 }
