@@ -88,8 +88,15 @@ jobs:
           echo "LLVM_SYS_160_PREFIX=$llvmPath" >> $env:GITHUB_ENV
           echo "$llvmPath\bin" >> $env:GITHUB_PATH
           echo "LIB=$llvmPath\lib;$env:LIB" >> $env:GITHUB_ENV
-          # Use LLVM's lld-link to avoid conflicts with Git's link.exe
+          
+          # Fix PATH conflict with Git's Unix-style link.exe
+          $path = $env:PATH
+          $newPath = ($path.Split(';') | Where-Object { $_ -notlike "*Git\usr\bin" }) -join ';'
+          echo "PATH=$newPath" >> $env:GITHUB_ENV
+          
+          # Force use of lld-link to avoid any remaining link.exe conflicts
           echo "RUSTFLAGS=-C linker=lld-link" >> $env:GITHUB_ENV
+          echo "CARGO_TARGET_X86_64_PC_WINDOWS_MSVC_LINKER=lld-link" >> $env:GITHUB_ENV
 
       - name: Install LLVM (macOS)
         if: runner.os == 'macOS'
