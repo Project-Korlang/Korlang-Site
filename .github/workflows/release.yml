@@ -4,29 +4,53 @@ on:
   push:
     branches:
       - main
+    tags:
+      - "v*"
 
 permissions:
   contents: write
 
 jobs:
-  release:
+  create-release:
     runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.tag.outputs.tag }}
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-
-      - name: Determine latest tag
+      - name: Determine tag
         id: tag
         run: |
           TAG=$(git tag --sort=-v:refname | head -n1)
-          if [ -z "$TAG" ]; then
-            TAG="v0.0.1-alpha"
-            git tag "$TAG"
-            git push origin "$TAG"
-          fi
+          if [ -z "$TAG" ]; then TAG="v0.0.1-alpha"; fi
+          if [[ "${{ github.ref }}" == refs/tags/* ]]; then TAG="${{ github.ref_name }}"; fi
           echo "tag=$TAG" >> $GITHUB_OUTPUT
+          gh release view "$TAG" >/dev/null 2>&1 || gh release create "$TAG" -t "$TAG" -n "Auto release"
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
 
+  build:
+    needs: create-release
+    name: Build (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-latest
+            platform: linux
+            artifact: korlang
+            asset_ext: tar.gz
+          - os: windows-latest
+            platform: windows
+            artifact: korlang.exe
+            asset_ext: zip
+          - os: macos-latest
+            platform: macos
+            artifact: korlang
+            asset_ext: tar.gz
+
+    steps:
       - uses: actions/checkout@v4
         with:
           repository: Project-Korlang/Korlang-Compiler
@@ -34,66 +58,68 @@ jobs:
 
       - uses: dtolnay/rust-toolchain@stable
 
-      - name: Install build deps
+      - name: Install LLVM (Linux)
+        if: matrix.os == "ubuntu-latest"
         run: |
           sudo apt-get update
-          sudo apt-get install -y llvm-16 llvm-16-dev clang lld zip libpolly-16-dev
+          sudo apt-get install -y llvm-16-dev libclang-16-dev libpolly-16-dev
 
-      - name: Build runtime
+      - name: Install LLVM (macOS)
+        if: matrix.os == "macos-latest"
+        run: brew install llvm@16
+
+      - name: Install LLVM (Windows)
+        if: matrix.os == "windows-latest"
+        run: choco install llvm --version=16.0.6 -y
+
+      - name: Build Runtime
+        shell: bash
         run: |
           cd compiler/src/runtime
           cargo build --release
 
       - name: Build CLI
+        shell: bash
         env:
-          LLVM_SYS_160_PREFIX: /usr/lib/llvm-16
-          LLVM_SYS_160_NO_Polly: 1
+          LLVM_SYS_160_PREFIX: ${{ matrix.os == "ubuntu-latest" && "/usr/lib/llvm-16" || "" }}
         run: |
           cd compiler/src/tools/cli
           cargo build --release
 
-      - name: Package release assets
+      - name: Package (Unix)
+        if: matrix.os != "windows-latest"
         run: |
-          TAG="${{ steps.tag.outputs.tag }}"
+          mkdir -p dist/bin dist/lib
+          cp compiler/src/tools/cli/target/release/korlang dist/bin/
+          cp compiler/src/runtime/target/release/libkorlang_rt.a dist/lib/
+          TAG="${{ needs.create-release.outputs.tag }}"
           VERSION="${TAG#v}"
-          rm -rf dist
-          mkdir -p dist/korlang/bin dist/korlang/lib
-          cp compiler/src/tools/cli/target/release/korlang dist/korlang/bin/
-          cp compiler/src/runtime/target/release/libkorlang_rt.a dist/korlang/lib/
-          tar -czf "dist/korlang-${TAG}-linux-x86_64.tar.gz" -C dist korlang
-          cp "dist/korlang-${TAG}-linux-x86_64.tar.gz" "dist/korlang-${TAG}-macos-x86_64.tar.gz"
-          zip -j "dist/korlang-${TAG}-windows-x86_64.zip" dist/korlang/bin/korlang dist/korlang/lib/libkorlang_rt.a
-          # New format assets (version without leading 'v')
-          cp "dist/korlang-${TAG}-linux-x86_64.tar.gz" "dist/korlang-${VERSION}-linux-x86_64.tar.gz"
-          cp "dist/korlang-${TAG}-macos-x86_64.tar.gz" "dist/korlang-${VERSION}-macos-x86_64.tar.gz"
-          cp "dist/korlang-${TAG}-windows-x86_64.zip" "dist/korlang-${VERSION}-windows-x86_64.zip"
-          sha256sum dist/korlang-* > dist/korlang-${TAG}-checksums.txt
-          cat > dist/korlang-${TAG}-manifest.json <<JSON
-          {
-            "tag": "${TAG}",
-            "version": "${VERSION}",
-            "assets": [
-              "korlang-${TAG}-linux-x86_64.tar.gz",
-              "korlang-${TAG}-macos-x86_64.tar.gz",
-              "korlang-${TAG}-windows-x86_64.zip",
-              "korlang-${VERSION}-linux-x86_64.tar.gz",
-              "korlang-${VERSION}-macos-x86_64.tar.gz",
-              "korlang-${VERSION}-windows-x86_64.zip",
-              "korlang-${TAG}-checksums.txt"
-            ]
-          }
-          JSON
+          # Package with tag
+          tar -czf "korlang-${TAG}-${{ matrix.platform }}-x86_64.tar.gz" -C dist .
+          # Package without leading v
+          cp "korlang-${TAG}-${{ matrix.platform }}-x86_64.tar.gz" "korlang-${VERSION}-${{ matrix.platform }}-x86_64.tar.gz"
 
-      - name: Upload release assets
+      - name: Package (Windows)
+        if: matrix.os == "windows-latest"
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path dist\bin
+          New-Item -ItemType Directory -Force -Path dist\lib
+          Copy-Item compiler\src\tools\cli\target\release\korlang.exe dist\bin\
+          Copy-Item compiler\src\runtime\target\release\korlang_rt.lib dist\lib\
+          $TAG="${{ needs.create-release.outputs.tag }}"
+          $VERSION=$TAG.TrimStart("v")
+          # Package with tag
+          Compress-Archive -Path dist\* -DestinationPath "korlang-$TAG-windows-x86_64.zip"
+          # Package without leading v
+          Copy-Item "korlang-$TAG-windows-x86_64.zip" "korlang-$VERSION-windows-x86_64.zip"
+
+      - name: Upload Assets
+        shell: bash
         env:
           GITHUB_TOKEN: ${{ github.token }}
         run: |
-          TAG="${{ steps.tag.outputs.tag }}"
-          gh release view "$TAG" >/dev/null 2>&1 || gh release create "$TAG" -t "$TAG" -n "Auto release"
-          gh release upload "$TAG" \
-            dist/korlang-*-linux-x86_64.tar.gz \
-            dist/korlang-*-macos-x86_64.tar.gz \
-            dist/korlang-*-windows-x86_64.zip \
-            dist/korlang-${TAG}-checksums.txt \
-            dist/korlang-${TAG}-manifest.json \
-            --clobber
+          TAG="${{ needs.create-release.outputs.tag }}"
+          VERSION="${TAG#v}"
+          gh release upload "$TAG" korlang-${TAG}-${{ matrix.platform }}-x86_64.${{ matrix.asset_ext }} --clobber
+          gh release upload "$TAG" korlang-${VERSION}-${{ matrix.platform }}-x86_64.${{ matrix.asset_ext }} --clobber
