@@ -46,7 +46,6 @@ jobs:
             platform: windows
             artifact: korlang.exe
             asset_ext: zip
-            llvm_prefix: 'C:\Program Files\LLVM'
           - os: macos-latest
             platform: macos
             artifact: korlang
@@ -76,16 +75,40 @@ jobs:
         shell: pwsh
         run: |
           choco install llvm --version=16.0.6 -y --allow-downgrade
-          echo "C:\Program Files\LLVM\bin" >> $env:GITHUB_PATH
-          echo "LLVM_SYS_160_PREFIX=C:\Program Files\LLVM" >> $env:GITHUB_ENV
+          
+          # Find where it actually is
+          $llvmPath = "C:\Program Files\LLVM"
+          if (-not (Test-Path "$llvmPath\bin\llvm-config.exe")) {
+              Write-Host "Searching for llvm-config.exe..."
+              $found = Get-ChildItem -Path C:\ -Filter "llvm-config.exe" -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1
+              if ($found) {
+                  $llvmPath = $found.Directory.Parent.FullName
+                  Write-Host "Found LLVM at $llvmPath"
+              }
+          }
+          
+          Write-Host "Setting LLVM_SYS_160_PREFIX to $llvmPath"
+          "$llvmPath\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+          "LLVM_SYS_160_PREFIX=$llvmPath" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
 
       - name: Verify LLVM (Windows)
         if: matrix.os == 'windows-latest'
         shell: pwsh
         run: |
-          # Try to run llvm-config to verify it is in PATH
-          llvm-config --version
-          echo "LLVM_SYS_160_PREFIX is $env:LLVM_SYS_160_PREFIX"
+          $config = Get-Command llvm-config -ErrorAction SilentlyContinue
+          if ($config) {
+              Write-Host "llvm-config found at: $($config.Source)"
+              llvm-config --version
+          } else {
+              Write-Host "llvm-config NOT in PATH. Checking env var..."
+              if (Test-Path "$env:LLVM_SYS_160_PREFIX\bin\llvm-config.exe") {
+                  & "$env:LLVM_SYS_160_PREFIX\bin\llvm-config.exe" --version
+              } else {
+                  Write-Host "Could not find llvm-config.exe anywhere!"
+                  ls "C:\Program Files\LLVM" -Recurse
+                  exit 1
+              }
+          }
 
       - name: Build Runtime
         shell: bash
@@ -95,9 +118,8 @@ jobs:
 
       - name: Build CLI
         shell: bash
-        env:
-          LLVM_SYS_160_PREFIX: ${{ matrix.llvm_prefix }}
         run: |
+          # Use the environment variable set by the previous step
           cd compiler/src/tools/cli
           cargo build --release
 
@@ -127,7 +149,11 @@ jobs:
           $TAG="${{ needs.create-release.outputs.tag }}"
           $VERSION=$TAG.TrimStart('v')
           Compress-Archive -Path dist\* -DestinationPath "korlang-$TAG-windows-x86_64.zip"
-          Copy-Item "korlang-$TAG-windows-x86_64.zip" "korlang-$VERSION-windows-x86_64.zip"
+          # Explicitly target the zip for copying to avoid errors if it is locked or not found
+          $zipPath = "korlang-$TAG-windows-x86_64.zip"
+          if (Test-Path $zipPath) {
+            Copy-Item $zipPath "korlang-$VERSION-windows-x86_64.zip"
+          }
 
       - name: Upload Assets
         shell: bash
