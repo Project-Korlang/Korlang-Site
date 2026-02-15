@@ -103,7 +103,9 @@ jobs:
           mkdir -p dist/bin dist/lib dist/stdlib
           cp compiler/target/release/korlang dist/bin/
           cp compiler/target/release/libkorlang_rt.a dist/lib/
-          cp -r compiler/src/stdlib/* dist/stdlib/
+          # Use find to avoid broken symlinks
+          cd compiler/src/stdlib && find . -type f -o -type d | cpio -pdm ../../../dist/stdlib/ 2>/dev/null || true
+          cd ../../..
           TAG="${{ needs.create-release.outputs.tag }}"
           tar -czf "korlang-${TAG}-${{ matrix.platform }}-x86_64.tar.gz" -C dist .
 

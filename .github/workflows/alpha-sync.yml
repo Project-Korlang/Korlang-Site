@@ -105,7 +105,9 @@ jobs:
           mkdir -p dist/korlang/bin dist/korlang/lib dist/korlang/stdlib
           cp target/release/korlang dist/korlang/bin/
           cp target/release/libkorlang_rt.a dist/korlang/lib/
-          cp -r src/stdlib/* dist/korlang/stdlib/
+          # Use find to avoid broken symlinks
+          cd src/stdlib && find . -type f -o -type d | cpio -pdm ../../dist/korlang/stdlib/ 2>/dev/null || true
+          cd ../..
           tar -czf "korlang-alpha-latest-${{ matrix.platform }}-x86_64.tar.gz" -C dist korlang
 
       - name: Package (Windows)
