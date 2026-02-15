@@ -103,8 +103,8 @@ jobs:
         if: runner.os != 'Windows'
         run: |
           mkdir -p dist/korlang/bin dist/korlang/lib dist/korlang/stdlib
-          cp src/tools/cli/target/release/korlang dist/korlang/bin/
-          cp src/runtime/target/release/libkorlang_rt.a dist/korlang/lib/
+          cp target/release/korlang dist/korlang/bin/
+          cp target/release/libkorlang_rt.a dist/korlang/lib/
           cp -r src/stdlib/* dist/korlang/stdlib/
           tar -czf "korlang-alpha-latest-${{ matrix.platform }}-x86_64.tar.gz" -C dist korlang
 
@@ -113,12 +113,12 @@ jobs:
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Path dist/korlang/bin, dist/korlang/lib, dist/korlang/stdlib -Force
-          Copy-Item src/tools/cli/target/release/korlang.exe dist/korlang/bin/
+          Copy-Item target/release/korlang.exe dist/korlang/bin/
           Copy-Item -Path src/stdlib/* -Destination dist/korlang/stdlib/ -Recurse -Force
-          if (Test-Path "src/runtime/target/release/korlang_rt.lib") {
-            Copy-Item "src/runtime/target/release/korlang_rt.lib" dist/korlang/lib/
+          if (Test-Path "target/release/korlang_rt.lib") {
+            Copy-Item "target/release/korlang_rt.lib" dist/korlang/lib/
           } else {
-            Copy-Item "src/runtime/target/release/libkorlang_rt.a" dist/korlang/lib/korlang_rt.lib
+            Copy-Item "target/release/libkorlang_rt.a" dist/korlang/lib/korlang_rt.lib
           }
           Compress-Archive -Path dist/korlang/* -DestinationPath "korlang-alpha-latest-windows-x86_64.zip"
 

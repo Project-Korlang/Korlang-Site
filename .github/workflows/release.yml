@@ -101,8 +101,8 @@ jobs:
         if: matrix.os != 'windows-latest'
         run: |
           mkdir -p dist/bin dist/lib dist/stdlib
-          cp compiler/src/tools/cli/target/release/korlang dist/bin/
-          cp compiler/src/runtime/target/release/libkorlang_rt.a dist/lib/
+          cp compiler/target/release/korlang dist/bin/
+          cp compiler/target/release/libkorlang_rt.a dist/lib/
           cp -r compiler/src/stdlib/* dist/stdlib/
           TAG="${{ needs.create-release.outputs.tag }}"
           tar -czf "korlang-${TAG}-${{ matrix.platform }}-x86_64.tar.gz" -C dist .
@@ -112,13 +112,13 @@ jobs:
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force -Path dist\bin, dist\lib, dist\stdlib
-          Copy-Item compiler\src\tools\cli\target\release\korlang.exe dist\bin\
+          Copy-Item compiler\target\release\korlang.exe dist\bin\
           Copy-Item -Path compiler\src\stdlib\* -Destination dist\stdlib\ -Recurse -Force
-          if (Test-Path "compiler\src\runtime\target\release\korlang_rt.lib") {
-            Copy-Item "compiler\src\runtime\target\release\korlang_rt.lib" dist\lib\
-          } elseif (Test-Path "compiler\src\runtime\target\release\libkorlang_rt.a") {
+          if (Test-Path "compiler\target\release\korlang_rt.lib") {
+            Copy-Item "compiler\target\release\korlang_rt.lib" dist\lib\
+          } elseif (Test-Path "compiler\target\release\libkorlang_rt.a") {
             # Some environments might produce .a instead of .lib even on Windows with gnu toolchain
-            Copy-Item "compiler\src\runtime\target\release\libkorlang_rt.a" dist\lib\korlang_rt.lib
+            Copy-Item "compiler\target\release\libkorlang_rt.a" dist\lib\korlang_rt.lib
           }
           $TAG="${{ needs.create-release.outputs.tag }}"
           Compress-Archive -Path dist\* -DestinationPath "korlang-$TAG-windows-x86_64.zip"
