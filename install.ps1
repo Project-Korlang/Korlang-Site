@@ -1,6 +1,5 @@
 $ErrorActionPreference = "Stop"
 
-# The releases are actually in the Site repo based on current setup
 $repo = "Project-Korlang/Korlang-Site"
 $apiUrl = "https://api.github.com/repos/" + $repo + "/releases"
 
@@ -8,7 +7,7 @@ $apiUrl = "https://api.github.com/repos/" + $repo + "/releases"
 $ProgressPreference = "SilentlyContinue"
 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
 
-Write-Host "Korlang Installer v1.3"
+Write-Host "Korlang Installer v1.4"
 Write-Host "========================"
 
 $channel = $env:KORLANG_CHANNEL
@@ -32,7 +31,7 @@ if ($env:KORLANG_VERSION) {
   Write-Host "Fetching latest $channel release from GitHub..."
   try {
     $headers = @{
-      "User-Agent" = "Korlang-Installer/1.3"
+      "User-Agent" = "Korlang-Installer/1.4"
       "Accept" = "application/vnd.github.v3+json"
     }
     $releases = Invoke-RestMethod -Uri ($apiUrl + "?per_page=100") -Headers $headers -TimeoutSec 30
@@ -41,14 +40,12 @@ if ($env:KORLANG_VERSION) {
         foreach ($r in $releases) {
           $tag = $r.tag_name
           
-          # Filter by channel
           if ($channel -eq "alpha") {
             if ($tag -notmatch "alpha") { continue }
           } else {
             if ($tag -match "alpha") { continue }
           }
 
-          # Look for windows assets
           $winAssets = $r.assets | Where-Object { $_.name -like "*windows*" }
           if ($winAssets) {
               $targetAsset = $winAssets | Where-Object { $_.name -like "*x86_64*" } | Select-Object -First 1
@@ -68,13 +65,12 @@ if ($env:KORLANG_VERSION) {
   }
 }
 
-# Corrected fallback to 0.0.1
 if (-not $url) {
   if (-not $latest) { $latest = "v0.0.1-alpha" }
   $channel = "alpha"
   $zip = "korlang-" + $latest + "-windows-x86_64.zip"
   $url = "https://github.com/" + $repo + "/releases/download/" + $latest + "/" + $zip
-  Write-Host "Auto-detection found no matching assets in releases. Falling back to: $latest"
+  Write-Host "Auto-detection found no matching assets. Using default: $latest"
 }
 
 Write-Host "Selected: $latest ($channel)"
@@ -86,9 +82,12 @@ if (-not (Test-Path $dest)) {
 }
 
 try {
-  $temp = [System.IO.Path]::GetTempFileName()
+  # FIX: Expand-Archive requires the file to have a .zip extension
+  $tempDir = [System.IO.Path]::GetTempPath()
+  $temp = Join-Path $tempDir ([Guid]::NewGuid().ToString() + ".zip")
+  
   Write-Host "Downloading..."
-  $dlHeaders = @{ "User-Agent" = "Korlang-Installer/1.3" }
+  $dlHeaders = @{ "User-Agent" = "Korlang-Installer/1.4" }
   Invoke-WebRequest -Uri $url -OutFile $temp -Headers $dlHeaders -TimeoutSec 60
   
   Write-Host "Extracting to $dest"
@@ -110,6 +109,7 @@ try {
   if (Test-Path $temp) { Remove-Item $temp }
 } catch {
   Write-Host "Download failed: $($_.Exception.Message)"
+  if (Test-Path $temp) { Remove-Item $temp }
   Write-Host ""
   Write-Host "Manual Installation:"
   Write-Host ("1. Visit: https://github.com/" + $repo + "/releases")
@@ -118,7 +118,6 @@ try {
   exit 1
 }
 
-# Verify installation
 $korlangExe = Join-Path $dest "korlang.exe"
 if (Test-Path $korlangExe) {
   Write-Host "✓ Korlang installed successfully!"
