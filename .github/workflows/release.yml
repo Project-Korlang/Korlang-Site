@@ -41,14 +41,17 @@ jobs:
             platform: linux
             artifact: korlang
             asset_ext: tar.gz
+            llvm_prefix: "/usr/lib/llvm-16"
           - os: windows-latest
             platform: windows
             artifact: korlang.exe
             asset_ext: zip
+            llvm_prefix: ""
           - os: macos-latest
             platform: macos
             artifact: korlang
             asset_ext: tar.gz
+            llvm_prefix: ""
 
     steps:
       - uses: actions/checkout@v4
@@ -81,7 +84,7 @@ jobs:
       - name: Build CLI
         shell: bash
         env:
-          LLVM_SYS_160_PREFIX: ${{ matrix.os == "ubuntu-latest" && "/usr/lib/llvm-16" || "" }}
+          LLVM_SYS_160_PREFIX: ${{ matrix.llvm_prefix }}
         run: |
           cd compiler/src/tools/cli
           cargo build --release
