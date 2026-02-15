@@ -46,7 +46,8 @@ jobs:
             platform: windows
             artifact: korlang.exe
             asset_ext: zip
-            llvm_prefix: 'C:\Program Files\LLVM'
+            # Use forward slashes for Windows path to avoid bash escape issues
+            llvm_prefix: 'C:/Program Files/LLVM'
           - os: macos-latest
             platform: macos
             artifact: korlang
@@ -75,7 +76,14 @@ jobs:
         if: matrix.os == 'windows-latest'
         run: |
           choco install llvm --version=16.0.6 -y --allow-downgrade
-          echo "C:\Program Files\LLVM\bin" >> $GITHUB_PATH
+          # Verify installation path and set PATH
+          if [ -d "C:/Program Files/LLVM/bin" ]; then
+            echo "C:/Program Files/LLVM/bin" >> $GITHUB_PATH
+            echo "LLVM installed at C:/Program Files/LLVM"
+          else
+            echo "LLVM not found in expected path!"
+            find /c -name "llvm-config.exe" 2>/dev/null || true
+          fi
         shell: bash
 
       - name: Build Runtime
@@ -89,6 +97,8 @@ jobs:
         env:
           LLVM_SYS_160_PREFIX: ${{ matrix.llvm_prefix }}
         run: |
+          # Debug: print environment
+          echo "LLVM_SYS_160_PREFIX: $LLVM_SYS_160_PREFIX"
           cd compiler/src/tools/cli
           cargo build --release
 
@@ -110,7 +120,12 @@ jobs:
           New-Item -ItemType Directory -Force -Path dist\bin
           New-Item -ItemType Directory -Force -Path dist\lib
           Copy-Item compiler\src\tools\cli\target\release\korlang.exe dist\bin\
-          Copy-Item compiler\src\runtime\target\release\korlang_rt.lib dist\lib\
+          # On Windows, rust produces .lib or .a for static libs. Check both.
+          if (Test-Path "compiler\src\runtime\target\release\korlang_rt.lib") {
+            Copy-Item "compiler\src\runtime\target\release\korlang_rt.lib" dist\lib\
+          } elseif (Test-Path "compiler\src\runtime\target\release\libkorlang_rt.a") {
+            Copy-Item "compiler\src\runtime\target\release\libkorlang_rt.a" dist\lib\
+          }
           $TAG="${{ needs.create-release.outputs.tag }}"
           $VERSION=$TAG.TrimStart('v')
           Compress-Archive -Path dist\* -DestinationPath "korlang-$TAG-windows-x86_64.zip"
