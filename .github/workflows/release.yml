@@ -80,30 +80,30 @@ jobs:
         run: |
           choco install llvm --version=16.0.6 -y --allow-downgrade --no-progress
           $llvmPath = "C:\Program Files\LLVM"
-          if (!(Test-Path $llvmPath)) {
-            $llvmPath = "C:\Program Files (x86)\LLVM"
-          }
-          if (!(Test-Path $llvmPath)) {
-            throw "LLVM 16.0.6 not found at $llvmPath"
-          }
+          if (!(Test-Path $llvmPath)) { $llvmPath = "C:\Program Files (x86)\LLVM" }
+          if (!(Test-Path $llvmPath)) { throw "LLVM 16.0.6 not found" }
           
-          # Use Add-Content for more reliable environment variable export
-          Add-Content -Path $env:GITHUB_ENV -Value "LLVM_SYS_160_PREFIX=$llvmPath"
-          Add-Content -Path $env:GITHUB_PATH -Value "$llvmPath\bin"
-          Add-Content -Path $env:GITHUB_ENV -Value "LIB=$llvmPath\lib;$env:LIB"
+          # Use UTF8 encoding for GITHUB_ENV and GITHUB_PATH
+          "LLVM_SYS_160_PREFIX=$llvmPath" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          "$llvmPath\bin" | Out-File -FilePath $env:GITHUB_PATH -Append -Encoding utf8
+          "LIB=$llvmPath\lib;$env:LIB" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
           
           # Force use of lld-link to avoid link.exe conflicts
-          Add-Content -Path $env:GITHUB_ENV -Value "RUSTFLAGS=-C linker=lld-link"
-          Add-Content -Path $env:GITHUB_ENV -Value "CARGO_TARGET_X86_64_PC_WINDOWS_MSVC_LINKER=lld-link"
+          "RUSTFLAGS=-C linker=lld-link" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          "CARGO_TARGET_X86_64_PC_WINDOWS_MSVC_LINKER=lld-link" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
 
       - name: Build Runtime
         shell: bash
+        env:
+          LLVM_SYS_160_PREFIX: 'C:\Program Files\LLVM'
         run: |
           cd compiler/src/runtime
           cargo build --release
 
       - name: Build CLI
         shell: bash
+        env:
+          LLVM_SYS_160_PREFIX: 'C:\Program Files\LLVM'
         run: |
           cd compiler/src/tools/cli
           cargo build --release
