@@ -1,13 +1,14 @@
 $ErrorActionPreference = "Stop"
 
-$repo = "Project-Korlang/Korlang-Compiler"
+# The releases are actually in the Site repo based on current setup
+$repo = "Project-Korlang/Korlang-Site"
 $apiUrl = "https://api.github.com/repos/" + $repo + "/releases"
 
 # Add TLS/SSL support and user agent
 $ProgressPreference = "SilentlyContinue"
 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
 
-Write-Host "Korlang Installer v1.2"
+Write-Host "Korlang Installer v1.3"
 Write-Host "========================"
 
 $channel = $env:KORLANG_CHANNEL
@@ -27,12 +28,11 @@ $url = $null
 if ($env:KORLANG_VERSION) {
   $latest = $env:KORLANG_VERSION
   Write-Host "Using specified version: $latest"
-  # Note: if version is specified, we still need to find the asset URL or construct it
 } else {
   Write-Host "Fetching latest $channel release from GitHub..."
   try {
     $headers = @{
-      "User-Agent" = "Korlang-Installer/1.2"
+      "User-Agent" = "Korlang-Installer/1.3"
       "Accept" = "application/vnd.github.v3+json"
     }
     $releases = Invoke-RestMethod -Uri ($apiUrl + "?per_page=100") -Headers $headers -TimeoutSec 30
@@ -41,17 +41,16 @@ if ($env:KORLANG_VERSION) {
         foreach ($r in $releases) {
           $tag = $r.tag_name
           
-          # 1. Filter by channel (stable vs alpha)
+          # Filter by channel
           if ($channel -eq "alpha") {
             if ($tag -notmatch "alpha") { continue }
           } else {
             if ($tag -match "alpha") { continue }
           }
 
-          # 2. Look for an asset with "windows" in the name
+          # Look for windows assets
           $winAssets = $r.assets | Where-Object { $_.name -like "*windows*" }
           if ($winAssets) {
-              # Prefer x86_64 if available
               $targetAsset = $winAssets | Where-Object { $_.name -like "*x86_64*" } | Select-Object -First 1
               if (-not $targetAsset) { $targetAsset = $winAssets | Select-Object -First 1 }
               
@@ -69,13 +68,13 @@ if ($env:KORLANG_VERSION) {
   }
 }
 
-# Fallback mechanism if detection failed (e.g. repo empty or offline)
+# Corrected fallback to 0.0.1
 if (-not $url) {
-  if (-not $latest) { $latest = "v0.1.0-alpha" }
+  if (-not $latest) { $latest = "v0.0.1-alpha" }
   $channel = "alpha"
   $zip = "korlang-" + $latest + "-windows-x86_64.zip"
   $url = "https://github.com/" + $repo + "/releases/download/" + $latest + "/" + $zip
-  Write-Host "Auto-detection found no matching assets. Using default: $latest"
+  Write-Host "Auto-detection found no matching assets in releases. Falling back to: $latest"
 }
 
 Write-Host "Selected: $latest ($channel)"
@@ -89,7 +88,7 @@ if (-not (Test-Path $dest)) {
 try {
   $temp = [System.IO.Path]::GetTempFileName()
   Write-Host "Downloading..."
-  $dlHeaders = @{ "User-Agent" = "Korlang-Installer/1.2" }
+  $dlHeaders = @{ "User-Agent" = "Korlang-Installer/1.3" }
   Invoke-WebRequest -Uri $url -OutFile $temp -Headers $dlHeaders -TimeoutSec 60
   
   Write-Host "Extracting to $dest"
