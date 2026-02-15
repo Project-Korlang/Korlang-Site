@@ -10,7 +10,7 @@ case "$ARCH" in
   arm64|aarch64) ARCH="aarch64";;
 esac
 
-REPO="Project-Korlang/Korlang-Site"
+REPO="Project-Korlang/Korlang-Compiler"
 API="https://api.github.com/repos/$REPO/releases"
 
 # 2. Channel Selection
