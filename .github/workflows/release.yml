@@ -76,18 +76,12 @@ jobs:
         run: |
           choco install llvm --version=16.0.6 -y --allow-downgrade
           
-          # Find where it actually is
           $llvmPath = "C:\Program Files\LLVM"
           if (-not (Test-Path "$llvmPath\bin\llvm-config.exe")) {
-              Write-Host "Searching for llvm-config.exe..."
               $found = Get-ChildItem -Path C:\ -Filter "llvm-config.exe" -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1
-              if ($found) {
-                  $llvmPath = $found.Directory.Parent.FullName
-                  Write-Host "Found LLVM at $llvmPath"
-              }
+              if ($found) { $llvmPath = $found.Directory.Parent.FullName }
           }
           
-          Write-Host "Setting LLVM_SYS_160_PREFIX to $llvmPath"
           "$llvmPath\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
           "LLVM_SYS_160_PREFIX=$llvmPath" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
 
@@ -97,29 +91,34 @@ jobs:
         run: |
           $config = Get-Command llvm-config -ErrorAction SilentlyContinue
           if ($config) {
-              Write-Host "llvm-config found at: $($config.Source)"
               llvm-config --version
           } else {
-              Write-Host "llvm-config NOT in PATH. Checking env var..."
               if (Test-Path "$env:LLVM_SYS_160_PREFIX\bin\llvm-config.exe") {
                   & "$env:LLVM_SYS_160_PREFIX\bin\llvm-config.exe" --version
               } else {
-                  Write-Host "Could not find llvm-config.exe anywhere!"
-                  ls "C:\Program Files\LLVM" -Recurse
                   exit 1
               }
           }
 
       - name: Build Runtime
         shell: bash
+        env:
+          # Clear MinGW related flags on Windows to avoid cl.exe conflicts
+          CFLAGS: ""
+          CPPFLAGS: ""
+          CXXFLAGS: ""
         run: |
           cd compiler/src/runtime
           cargo build --release
 
       - name: Build CLI
         shell: bash
+        env:
+          # Clear MinGW related flags on Windows to avoid cl.exe conflicts
+          CFLAGS: ""
+          CPPFLAGS: ""
+          CXXFLAGS: ""
         run: |
-          # Use the environment variable set by the previous step
           cd compiler/src/tools/cli
           cargo build --release
 
@@ -147,12 +146,10 @@ jobs:
             Copy-Item "compiler\src\runtime\target\release\libkorlang_rt.a" dist\lib\
           }
           $TAG="${{ needs.create-release.outputs.tag }}"
-          $VERSION=$TAG.TrimStart('v')
+          $VERSION=$TAG -replace '^v', ''
           Compress-Archive -Path dist\* -DestinationPath "korlang-$TAG-windows-x86_64.zip"
-          # Explicitly target the zip for copying to avoid errors if it is locked or not found
-          $zipPath = "korlang-$TAG-windows-x86_64.zip"
-          if (Test-Path $zipPath) {
-            Copy-Item $zipPath "korlang-$VERSION-windows-x86_64.zip"
+          if (Test-Path "korlang-$TAG-windows-x86_64.zip") {
+            Copy-Item "korlang-$TAG-windows-x86_64.zip" "korlang-$VERSION-windows-x86_64.zip"
           }
 
       - name: Upload Assets
