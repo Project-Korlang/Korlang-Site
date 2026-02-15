@@ -46,8 +46,7 @@ jobs:
             platform: windows
             artifact: korlang.exe
             asset_ext: zip
-            # Use forward slashes for Windows path to avoid bash escape issues
-            llvm_prefix: 'C:/Program Files/LLVM'
+            llvm_prefix: 'C:\Program Files\LLVM'
           - os: macos-latest
             platform: macos
             artifact: korlang
@@ -74,17 +73,19 @@ jobs:
 
       - name: Install LLVM (Windows)
         if: matrix.os == 'windows-latest'
+        shell: pwsh
         run: |
           choco install llvm --version=16.0.6 -y --allow-downgrade
-          # Verify installation path and set PATH
-          if [ -d "C:/Program Files/LLVM/bin" ]; then
-            echo "C:/Program Files/LLVM/bin" >> $GITHUB_PATH
-            echo "LLVM installed at C:/Program Files/LLVM"
-          else
-            echo "LLVM not found in expected path!"
-            find /c -name "llvm-config.exe" 2>/dev/null || true
-          fi
-        shell: bash
+          echo "C:\Program Files\LLVM\bin" >> $env:GITHUB_PATH
+          echo "LLVM_SYS_160_PREFIX=C:\Program Files\LLVM" >> $env:GITHUB_ENV
+
+      - name: Verify LLVM (Windows)
+        if: matrix.os == 'windows-latest'
+        shell: pwsh
+        run: |
+          # Try to run llvm-config to verify it is in PATH
+          llvm-config --version
+          echo "LLVM_SYS_160_PREFIX is $env:LLVM_SYS_160_PREFIX"
 
       - name: Build Runtime
         shell: bash
@@ -97,8 +98,6 @@ jobs:
         env:
           LLVM_SYS_160_PREFIX: ${{ matrix.llvm_prefix }}
         run: |
-          # Debug: print environment
-          echo "LLVM_SYS_160_PREFIX: $LLVM_SYS_160_PREFIX"
           cd compiler/src/tools/cli
           cargo build --release
 
@@ -120,7 +119,6 @@ jobs:
           New-Item -ItemType Directory -Force -Path dist\bin
           New-Item -ItemType Directory -Force -Path dist\lib
           Copy-Item compiler\src\tools\cli\target\release\korlang.exe dist\bin\
-          # On Windows, rust produces .lib or .a for static libs. Check both.
           if (Test-Path "compiler\src\runtime\target\release\korlang_rt.lib") {
             Copy-Item "compiler\src\runtime\target\release\korlang_rt.lib" dist\lib\
           } elseif (Test-Path "compiler\src\runtime\target\release\libkorlang_rt.a") {
