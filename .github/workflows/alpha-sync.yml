@@ -87,21 +87,20 @@ jobs:
           $originalPath = "C:\Program Files\LLVM"
           if (!(Test-Path $originalPath)) { $originalPath = "C:\Program Files (x86)\LLVM" }
           
-          # Create a junction to avoid space issues in paths (C:\Program Files\LLVM -> C:\LLVM)
-          # This is the most reliable way to handle toolchains that struggle with spaces.
+          # Create a junction to avoid space issues in paths
           $llvmPath = "C:\LLVM"
           if (Test-Path $llvmPath) { Remove-Item $llvmPath -Recurse -Force }
           New-Item -ItemType Junction -Path $llvmPath -Target $originalPath
           
-          # Use forward slashes for the environment variable to be shell-agnostic
-          $llvmPrefix = $llvmPath.Replace('\', '/')
-          "LLVM_SYS_160_PREFIX=$llvmPrefix" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
-          "$llvmPath\bin" | Out-File -FilePath $env:GITHUB_PATH -Append -Encoding utf8
-          "LIB=$llvmPath\lib;$env:LIB" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          # Use Add-Content for more reliable environment export
+          Add-Content -Path $env:GITHUB_ENV -Value "LLVM_SYS_160_PREFIX=C:/LLVM"
+          Add-Content -Path $env:GITHUB_ENV -Value "LLVM_CONFIG=C:/LLVM/bin/llvm-config.exe"
+          Add-Content -Path $env:GITHUB_PATH -Value "C:/LLVM/bin"
+          Add-Content -Path $env:GITHUB_ENV -Value "LIB=C:/LLVM/lib;$env:LIB"
           
           # Avoid PATH conflict with Git's Unix link.exe
-          "RUSTFLAGS=-C linker=lld-link" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
-          "CARGO_TARGET_X86_64_PC_WINDOWS_MSVC_LINKER=lld-link" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          Add-Content -Path $env:GITHUB_ENV -Value "RUSTFLAGS=-C linker=lld-link"
+          Add-Content -Path $env:GITHUB_ENV -Value "CARGO_TARGET_X86_64_PC_WINDOWS_MSVC_LINKER=lld-link"
 
       - name: Install LLVM (macOS)
         if: runner.os == 'macOS'
@@ -110,14 +109,21 @@ jobs:
       - name: Build (Windows)
         if: runner.os == 'Windows'
         shell: pwsh
+        env:
+          LLVM_SYS_160_PREFIX: C:/LLVM
+          LLVM_CONFIG: C:/LLVM/bin/llvm-config.exe
         run: |
-          $env:LLVM_SYS_160_PREFIX = "C:/LLVM"
-          $env:LLVM_CONFIG = "C:/LLVM/bin/llvm-config.exe"
+          # Debug: Verify LLVM presence
+          ls C:\LLVM
+          ls C:\LLVM\bin\llvm-config.exe
+          
           cd src/runtime
           cargo build --release
           cd ../..
           cd src/tools/cli
           cargo build --release
+          # Clear for next steps
+          $env:LLVM_SYS_160_PREFIX = ""
 
       - name: Build (Unix)
         if: runner.os != 'Windows'
