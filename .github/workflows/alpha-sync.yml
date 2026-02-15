@@ -85,18 +85,23 @@ jobs:
         run: |
           choco install llvm --version=16.0.6 --no-progress --allow-downgrade --force --yes
           $llvmPath = "C:\Program Files\LLVM"
-          echo "LLVM_SYS_160_PREFIX=$llvmPath" >> $env:GITHUB_ENV
-          echo "$llvmPath\bin" >> $env:GITHUB_PATH
-          echo "LIB=$llvmPath\lib;$env:LIB" >> $env:GITHUB_ENV
+          if (!(Test-Path $llvmPath)) {
+            $llvmPath = "C:\Program Files (x86)\LLVM"
+          }
+          if (!(Test-Path $llvmPath)) {
+            throw "LLVM 16.0.6 not found at $llvmPath"
+          }
           
-          # Fix PATH conflict with Git's Unix-style link.exe
-          $path = $env:PATH
-          $newPath = ($path.Split(';') | Where-Object { $_ -notlike "*Git\usr\bin" }) -join ';'
-          echo "PATH=$newPath" >> $env:GITHUB_ENV
+          # Use Add-Content for more reliable environment variable export
+          Add-Content -Path $env:GITHUB_ENV -Value "LLVM_SYS_160_PREFIX=$llvmPath"
+          Add-Content -Path $env:GITHUB_PATH -Value "$llvmPath\bin"
+          Add-Content -Path $env:GITHUB_ENV -Value "LIB=$llvmPath\lib;$env:LIB"
           
-          # Force use of lld-link to avoid any remaining link.exe conflicts
-          echo "RUSTFLAGS=-C linker=lld-link" >> $env:GITHUB_ENV
-          echo "CARGO_TARGET_X86_64_PC_WINDOWS_MSVC_LINKER=lld-link" >> $env:GITHUB_ENV
+          # Avoid PATH conflict with Git's Unix link.exe without nuking the whole usr/bin
+          # Instead of replacing PATH, we've prepended LLVM/bin and MSVC will be prepended too.
+          # We force lld-link to be safer.
+          Add-Content -Path $env:GITHUB_ENV -Value "RUSTFLAGS=-C linker=lld-link"
+          Add-Content -Path $env:GITHUB_ENV -Value "CARGO_TARGET_X86_64_PC_WINDOWS_MSVC_LINKER=lld-link"
 
       - name: Install LLVM (macOS)
         if: runner.os == 'macOS'
