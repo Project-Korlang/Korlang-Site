@@ -46,7 +46,7 @@ jobs:
             platform: windows
             artifact: korlang.exe
             asset_ext: zip
-            llvm_prefix: ''
+            llvm_prefix: 'C:\Program Files\LLVM'
           - os: macos-latest
             platform: macos
             artifact: korlang
@@ -73,7 +73,10 @@ jobs:
 
       - name: Install LLVM (Windows)
         if: matrix.os == 'windows-latest'
-        run: choco install llvm --version=16.0.6 -y --allow-downgrade
+        run: |
+          choco install llvm --version=16.0.6 -y --allow-downgrade
+          echo "C:\Program Files\LLVM\bin" >> $GITHUB_PATH
+        shell: bash
 
       - name: Build Runtime
         shell: bash
